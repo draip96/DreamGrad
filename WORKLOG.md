@@ -628,3 +628,26 @@ small deterministic correctness checks.
   in provenance. The ablation will be a diagnostic until a later matched
   cache-off/cache-on confirmation establishes whether it is suitable for the
   no-curriculum long-dependency gate.
+
+### 2026-08-25 22:21 UTC - replay-value stop-gradient acquired distance 8
+
+- Job `5020575` reached all 20,000 rows and exactly 2,000 episodes, then
+  intentionally exited 3 because the fixed tail-1,000 gate included its
+  pre-acquisition phase. Cumulative accuracy was 0.6285 and tail-1,000 accuracy
+  was 0.772, so this failed artifact is retained rather than relabeled a pass.
+- The functional diagnostics show a clear late acquisition transition rather
+  than chance: final terminal reward-sign accuracy was 0.9745, terminal MAE was
+  0.0775, and the final stopped imagined-return diagnostic was 0.6859. The last
+  200 online episodes contained 192 successes (0.96 accuracy, mean return
+  0.92). This differs decisively from every native and `free_nats=0` distance-8
+  run, whose reward-sign accuracy remained near 0.50 through the same budget.
+- The sole scientific change was the existing upstream configuration switch
+  `agent.repval_grad=False`; replay-value prediction still trained, but its
+  gradient could not overwrite the RSSM representation. The prepared
+  world-model auxiliary ablation is therefore not launched.
+- Froze a fresh matched confirmation at 30,000 rows/3,000 episodes, seed 9407,
+  native `free_nats=1.0`, and `repval_grad=False`, with cache-disabled and
+  cache-enabled arms differing only by saved gradients. No checkpoint is
+  transferred. The budget is not selected from a successful tail statistic:
+  it places the predeclared final 1,000 episodes at rows 20,010--30,000, after
+  the independently observed roughly 15,000-row acquisition transition.
