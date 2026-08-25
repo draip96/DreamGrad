@@ -155,4 +155,14 @@ def train_eval(
     if should_save(step):
       cp.save()
 
+  if agg.reducers or train_epstats.reducers:
+    logger.add(agg.result())
+    logger.add(train_epstats.result(), prefix='epstats')
+    logger.add(replay_train.stats(), prefix='replay')
+    logger.add(usage.stats(), prefix='usage')
+    logger.add({'fps/policy': policy_fps.result()})
+    logger.add({'fps/train': train_fps.result()})
+    logger.add({'timer': elements.timer.stats()['summary']})
+  logger.write()
+  cp.save()
   logger.close()

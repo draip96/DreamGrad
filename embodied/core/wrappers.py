@@ -147,33 +147,34 @@ class NormalizeAction(Wrapper):
 #     return obs
 #
 #
-# class FlattenTwoDimObs(Wrapper):
-#
-#   def __init__(self, env):
-#     super().__init__(env)
-#     self._keys = []
-#     self._obs_space = {}
-#     for key, space in self.env.obs_space.items():
-#       if len(space.shape) == 2:
-#         space = elements.Space(
-#             space.dtype,
-#             (int(np.prod(space.shape)),),
-#             space.low.flatten(),
-#             space.high.flatten())
-#         self._keys.append(key)
-#       self._obs_space[key] = space
-#
-#   @functools.cached_property
-#   def obs_space(self):
-#     return self._obs_space
-#
-#   def step(self, action):
-#     obs = self.env.step(action).copy()
-#     for key in self._keys:
-#       obs[key] = obs[key].flatten()
-#     return obs
-#
-#
+class FlattenTwoDimObs(Wrapper):
+
+  def __init__(self, env):
+    super().__init__(env)
+    self._keys = []
+    self._obs_space = {}
+    for key, space in self.env.obs_space.items():
+      if len(space.shape) == 2:
+        flatten = lambda x: None if x is None else np.asarray(x).flatten()
+        space = elements.Space(
+            space.dtype,
+            (int(np.prod(space.shape)),),
+            flatten(space.low),
+            flatten(space.high))
+        self._keys.append(key)
+      self._obs_space[key] = space
+
+  @functools.cached_property
+  def obs_space(self):
+    return self._obs_space
+
+  def step(self, action):
+    obs = self.env.step(action).copy()
+    for key in self._keys:
+      obs[key] = obs[key].flatten()
+    return obs
+
+
 # class FlattenTwoDimActions(Wrapper):
 #
 #   def __init__(self, env):

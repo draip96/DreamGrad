@@ -15,7 +15,8 @@ class Replay:
 
   def __init__(
       self, length, capacity=None, directory=None, chunksize=1024,
-      online=False, selector=None, save_wait=False, name='unnamed', seed=0):
+      online=False, selector=None, save_wait=False, persist_updates=False,
+      atomic_updates=False, name='unnamed', seed=0):
 
     self.length = length
     self.capacity = capacity
@@ -49,6 +50,12 @@ class Replay:
     else:
       self.directory = None
     self.save_wait = save_wait
+    self.persist_updates = persist_updates
+    self.atomic_updates = atomic_updates
+    if self.persist_updates and not self.save_wait:
+      raise ValueError('Persisted replay updates require save_wait=True.')
+    if self.persist_updates and not self.atomic_updates:
+      raise ValueError('Persisted replay updates require atomic_updates=True.')
 
     self.metrics = {'samples': 0, 'inserts': 0, 'updates': 0}
 
@@ -121,13 +128,30 @@ class Replay:
   def sample(self, batch, mode='train'):
     message = f'Replay buffer {self.name} is empty'
     limiters.wait(lambda: len(self.sampler), message)
+    if self.atomic_updates:
+      with self.rwlock.reading:
+        return self._sample_batch(batch, mode)
+    return self._sample_batch(batch, mode)
+
+  def _sample_batch(self, batch, mode):
     seqs, is_online = zip(*[self._sample(mode) for _ in range(batch)])
     data = self._assemble_batch(seqs, 0, self.length)
-    data = self._annotate_batch(data, is_online, True)
-    return data
+    return self._annotate_batch(data, is_online, True)
 
   @elements.timer.section('replay_update')
   def update(self, data):
+    payloads = data if isinstance(data, (tuple, list)) else (data,)
+    # State and adjoint payloads describe one learner forward and must become
+    # visible together. Sampling holds the matching read lock.
+    if self.atomic_updates:
+      with self.rwlock.writing:
+        for payload in payloads:
+          self._update(payload)
+    else:
+      for payload in payloads:
+        self._update(payload)
+
+  def _update(self, data):
     stepid = data.pop('stepid')
     priority = data.pop('priority', None)
     assert stepid.ndim == 3, stepid.shape
@@ -219,11 +243,13 @@ class Replay:
     available = chunk.length - index
     if available >= length:
       with elements.timer.section('set_slice'):
+        self._mark_dirty(chunk)
         return chunk.update(index, length, values)
     else:
       with elements.timer.section('set_compose'):
         part = {k: v[:available] for k, v in values.items()}
         values = {k: v[available:] for k, v in values.items()}
+        self._mark_dirty(chunk)
         chunk.update(index, available, part)
         remaining = length - available
         while remaining > 0:
@@ -231,8 +257,14 @@ class Replay:
           used = min(remaining, chunk.length)
           part = {k: v[:used] for k, v in values.items()}
           values = {k: v[used:] for k, v in values.items()}
+          self._mark_dirty(chunk)
           chunk.update(0, used, part)
           remaining -= used
+
+  def _mark_dirty(self, chunk):
+    if self.directory and self.persist_updates:
+      self.saved.discard(chunk.uuid)
+      chunk.saved = False
 
   # def dataset(self, batch, length=None, consec=None, prefix=0, report=False):
   #   length = length or self.length

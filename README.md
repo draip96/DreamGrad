@@ -1,4 +1,25 @@
-# Mastering Diverse Domains through World Models
+# DreamGrad
+
+DreamGrad is a scientific fork of DreamerV3's 12M profile that adds
+replay-aligned saved gradients for the complete recurrent RSSM state. It is
+pinned to upstream commit `e3f02248693a79dc8b0ebd62c93683888ddaccfe`.
+
+The learning change is deliberately narrow: replay rows store detached
+`(deter, stoch)` states and their saved adjoints, and learner chunks use the
+boundary surrogate from [`docs/GRADIENT_CACHE.md`](docs/GRADIENT_CACHE.md).
+There is no age, version, priority, rejection, EMA, burn-in, damping, clipping,
+or other freshness mechanism. Cache-disabled execution retains upstream
+learning and replay behavior.
+
+The complete implementation and experiment record is in
+[`WORKLOG.md`](WORKLOG.md). Long-range ToyMemory and BSuite results are only
+reported there after their explicit gates finish; successful compilation or a
+nonzero cache hit rate is not labeled as learning.
+
+The Python package and `dreamerv3/main.py` entry point keep their upstream names
+for command and checkpoint compatibility.
+
+## Upstream DreamerV3: Mastering Diverse Domains through World Models
 
 A reimplementation of [DreamerV3][paper], a scalable and general reinforcement
 learning algorithm that masters a wide range of applications with fixed

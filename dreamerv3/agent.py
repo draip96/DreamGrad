@@ -34,6 +34,8 @@ class Agent(embodied.jax.Agent):
     self.obs_space = obs_space
     self.act_space = act_space
     self.config = config
+    if config.gradient_cache.enabled and config.replay_context != 1:
+      raise ValueError('Saved gradients require replay_context=1.')
 
     exclude = ('is_first', 'is_last', 'is_terminal', 'reward')
     enc_space = {k: v for k, v in obs_space.items() if k not in exclude}
@@ -96,6 +98,13 @@ class Agent(embodied.jax.Agent):
           enc=self.enc.entry_space,
           dyn=self.dyn.entry_space,
           dec=self.dec.entry_space)))
+    if self.config.gradient_cache.enabled:
+      spaces.update(elements.tree.flatdict(dict(grad={
+          'deter': elements.Space(np.float32, self.dyn.deter),
+          'stoch': elements.Space(
+              np.float32, (self.dyn.stoch, self.dyn.classes)),
+          'valid': elements.Space(bool),
+      })))
     return spaces
 
   def init_policy(self, batch_size):
@@ -132,12 +141,48 @@ class Agent(embodied.jax.Agent):
     if self.config.replay_context:
       out.update(elements.tree.flatdict(dict(
           enc=enc_entry, dyn=dyn_entry, dec=dec_entry)))
+    if self.config.gradient_cache.enabled:
+      grad_entry = jax.tree.map(
+          lambda x: jnp.zeros(x.shape, f32), dyn_entry)
+      out.update(elements.tree.flatdict(dict(grad={
+          **grad_entry,
+          'valid': jnp.zeros(reset.shape, bool),
+      })))
     return carry, act, out
 
   def train(self, carry, data):
+    cache_enabled = self.config.gradient_cache.enabled
+    if cache_enabled:
+      nested = elements.tree.nestdict(data)
+      future = {
+          key: nested['grad'][key][:, -1]
+          for key in ('deter', 'stoch')}
+      future_finite = jnp.ones(future['deter'].shape[:1], bool)
+      for value in future.values():
+        future_finite &= jnp.isfinite(value).reshape((len(value), -1)).all(-1)
+      future_valid = (
+          nested['grad']['valid'][:, -1].astype(bool) &
+          ~data['is_last'][:, -1].astype(bool) & future_finite)
+      future = jax.tree.map(
+          lambda x: jnp.where(
+              future_valid.reshape(
+                  future_valid.shape + (1,) * (x.ndim - 1)),
+              x, jnp.zeros_like(x)),
+          future)
     carry, obs, prevact, stepid = self._apply_replay_context(carry, data)
-    metrics, (carry, entries, outs, mets) = self.opt(
-        self.loss, carry, obs, prevact, training=True, has_aux=True)
+    if cache_enabled:
+      B, T = obs['is_first'].shape
+      dyn_carry = carry[1]
+      state_taps = jax.tree.map(
+          lambda x: jnp.zeros((B, T, *x.shape[1:]), f32), dyn_carry)
+      metrics, (carry, entries, outs, mets), input_grads = self.opt(
+          self.loss, carry, obs, prevact, state_taps, future,
+          training=True, has_aux=True, input_grad_argnums=(3,),
+          separate_input_loss=True)
+      (incoming_adjoint,) = input_grads
+    else:
+      metrics, (carry, entries, outs, mets) = self.opt(
+          self.loss, carry, obs, prevact, training=True, has_aux=True)
     metrics.update(mets)
     self.slowval.update()
     outs = {}
@@ -148,12 +193,73 @@ class Agent(embodied.jax.Agent):
       assert all(x.shape[:2] == (B, T) for x in updates.values()), (
           (B, T), {k: v.shape for k, v in updates.items()})
       outs['replay'] = updates
+    if cache_enabled:
+      # The learner scalar is a local batch mean. Store per-example messages so
+      # cache semantics remain invariant to batch size, then consume them with
+      # a batch mean in ``loss``.
+      incoming_adjoint = jax.tree.map(
+          lambda x: f32(B) * f32(x), incoming_adjoint)
+      terminal = data['is_last'][:, :-1].astype(bool)
+      incoming_finite = jnp.ones(terminal.shape, bool)
+      for value in incoming_adjoint.values():
+        incoming_finite &= jnp.isfinite(value).reshape((B, T, -1)).all(-1)
+      incoming_adjoint = jax.tree.map(
+          lambda x: jnp.where(
+              (terminal | ~incoming_finite).reshape(
+                  terminal.shape + (1,) * (x.ndim - 2)),
+              jnp.zeros_like(x), x),
+          incoming_adjoint)
+      grad_updates = elements.tree.flatdict(dict(
+          stepid=data['stepid'][:, :-1],
+          grad={
+              **incoming_adjoint,
+              'valid': incoming_finite | terminal,
+          }))
+      assert all(x.shape[:2] == (B, T) for x in grad_updates.values()), (
+          (B, T), {k: v.shape for k, v in grad_updates.items()})
+      # Interior rows carry S and G from the same batch occurrence. One-sided
+      # endpoint writes happen first, then paired rows win any cross-batch
+      # duplicate IDs. This preserves relative state/adjoint freshness without
+      # versions, ages, filtering, or resampling.
+      state_fields = {k: v for k, v in updates.items() if k != 'stepid'}
+      grad_fields = {k: v for k, v in grad_updates.items() if k != 'stepid'}
+      leading_grad = {
+          'stepid': data['stepid'][:, :1],
+          **{k: v[:, :1] for k, v in grad_fields.items()},
+      }
+      trailing_state = {
+          'stepid': data['stepid'][:, -1:],
+          **{k: v[:, -1:] for k, v in state_fields.items()},
+      }
+      payloads = [leading_grad, trailing_state]
+      if T > 1:
+        paired = {
+            'stepid': data['stepid'][:, 1:-1],
+            **{k: v[:, :-1] for k, v in state_fields.items()},
+            **{k: v[:, 1:] for k, v in grad_fields.items()},
+        }
+        payloads.append(paired)
+      outs['replay'] = tuple(payloads)
+      incoming_flat = jnp.concatenate([
+          x.reshape((B, -1)) for x in incoming_adjoint.values()], -1)
+      future_flat = jnp.concatenate([
+          x.reshape((B, -1)) for x in future.values()], -1)
+      metrics['cache/future_hit_rate'] = f32(
+          nested['grad']['valid'][:, -1] &
+          ~data['is_last'][:, -1]).mean()
+      metrics['cache/future_used_rate'] = f32(future_valid).mean()
+      metrics['cache/future_adjoint_rms'] = jnp.sqrt(
+          jnp.mean(future_flat ** 2))
+      metrics['cache/adjoint_rms'] = jnp.sqrt(jnp.mean(incoming_flat ** 2))
+      metrics['cache/adjoint_finite_fraction'] = f32(incoming_finite).mean()
     # if self.config.replay.fracs.priority > 0:
     #   outs['replay']['priority'] = losses['model']
     carry = (*carry, {k: data[k][:, -1] for k in self.act_space})
     return carry, outs, metrics
 
-  def loss(self, carry, obs, prevact, training):
+  def loss(
+      self, carry, obs, prevact, state_taps=None, future_adjoint=None,
+      training=False):
     enc_carry, dyn_carry, dec_carry = carry
     reset = obs['is_first']
     B, T = reset.shape
@@ -164,13 +270,26 @@ class Agent(embodied.jax.Agent):
     enc_carry, enc_entries, tokens = self.enc(
         enc_carry, obs, reset, training)
     dyn_carry, dyn_entries, los, repfeat, mets = self.dyn.loss(
-        dyn_carry, tokens, prevact, reset, training)
+        dyn_carry, tokens, prevact, reset, training, state_taps)
     losses.update(los)
     metrics.update(mets)
     dec_carry, dec_entries, recons = self.dec(
         dec_carry, repfeat, reset, training)
     inp = sg(self.feat2tensor(repfeat), skip=self.config.reward_grad)
-    losses['rew'] = self.rew(inp, 2).loss(obs['reward'])
+    reward_dist = self.rew(inp, 2)
+    losses['rew'] = reward_dist.loss(obs['reward'])
+    # Functional world-model diagnostics. These are auxiliary outputs only and
+    # do not alter the learner scalar or any gradient path.
+    reward_pred = sg(reward_dist.pred())
+    terminal = f32(obs['is_terminal'])
+    terminal_count = jnp.maximum(terminal.sum(), 1.0)
+    reward_sign_match = f32(
+        (reward_pred > 0) == (obs['reward'] > 0))
+    metrics['model/terminal_fraction'] = terminal.mean()
+    metrics['model/terminal_reward_sign_accuracy'] = (
+        reward_sign_match * terminal).sum() / terminal_count
+    metrics['model/terminal_reward_mae'] = (
+        jnp.abs(reward_pred - obs['reward']) * terminal).sum() / terminal_count
     con = f32(~obs['is_terminal'])
     if self.config.contdisc:
       con *= 1 - 1 / self.config.horizon
@@ -184,6 +303,8 @@ class Agent(embodied.jax.Agent):
     B, T = reset.shape
     shapes = {k: v.shape for k, v in losses.items()}
     assert all(x == (B, T) for x in shapes.values()), ((B, T), shapes)
+    model_loss = sum(
+        [value.mean() * self.scales[key] for key, value in losses.items()])
 
     # Imagination
     K = min(self.config.imag_last or T, T)
@@ -238,11 +359,30 @@ class Agent(embodied.jax.Agent):
         sorted(losses.keys()), sorted(self.scales.keys()))
     metrics.update({f'loss/{k}': v.mean() for k, v in losses.items()})
     loss = sum([v.mean() * self.scales[k] for k, v in losses.items()])
+    cache_loss = model_loss
+
+    if future_adjoint is not None:
+      # Centering the final state makes the surrogate's primal value exactly
+      # zero while preserving d/dS <stop(G), S>. Native loss reporting and
+      # mixed-precision scaling therefore remain unchanged.
+      centered = jax.tree.map(lambda x: x - sg(x), dyn_carry)
+      terms = [
+          (sg(future_adjoint[key]) * centered[key]).reshape((B, -1)).sum(-1)
+          for key in ('deter', 'stoch')]
+      surrogate = jnp.stack(terms).sum(0).mean()
+      loss = loss + f32(surrogate)
+      cache_loss = cache_loss + f32(surrogate)
+      raw_terms = [
+          (sg(future_adjoint[key]) * sg(dyn_carry[key]))
+          .reshape((B, -1)).sum(-1)
+          for key in ('deter', 'stoch')]
+      metrics['cache/surrogate_raw'] = jnp.stack(raw_terms).sum(0).mean()
 
     carry = (enc_carry, dyn_carry, dec_carry)
     entries = (enc_entries, dyn_entries, dec_entries)
     outs = {'tokens': tokens, 'repfeat': repfeat, 'losses': losses}
-    return loss, (carry, entries, outs, metrics)
+    objective = (loss, cache_loss) if state_taps is not None else loss
+    return objective, (carry, entries, outs, metrics)
 
   def report(self, carry, data):
     if not self.config.report:

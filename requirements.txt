@@ -1,6 +1,7 @@
 ale_py==0.9.0
 autorom[accept-rom-license]==0.6.1
 av
+bsuite==0.3.5
 chex
 colored_traceback
 einops
@@ -8,12 +9,12 @@ elements>=3.19.1
 google-resumable-media>=2.7.2
 granular>=0.20.3
 ipdb
-jax[cuda12]==0.4.33
+jax[cuda12-local]==0.4.33
 jaxtyping
-ninjax>=3.5.1
+ninjax==3.6.3
 numpy<2  # DMLab: <2, MineRLv1.0: <1.24
-nvidia-cuda-nvcc-cu12<=12.2
 optax
 portal>=3.5.0
+pytest
 scope>=0.4.4
 tqdm

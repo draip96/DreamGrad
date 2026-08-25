@@ -58,23 +58,40 @@ class RSSM(nj.Module):
     return jax.tree.map(
         lambda x: x[:, -nlast:].reshape((B * nlast, *x.shape[2:])), entries)
 
-  def observe(self, carry, tokens, action, reset, training, single=False):
+  def observe(
+      self, carry, tokens, action, reset, training, single=False,
+      state_taps=None):
     carry, tokens, action = nn.cast((carry, tokens, action))
     if single:
+      if state_taps is not None:
+        state_taps = nn.cast(state_taps)
       carry, (entry, feat) = self._observe(
-          carry, tokens, action, reset, training)
+          carry, tokens, action, reset, training, state_taps)
       return carry, entry, feat
     else:
       unroll = jax.tree.leaves(tokens)[0].shape[1] if self.unroll else 1
-      carry, (entries, feat) = nj.scan(
-          lambda carry, inputs: self._observe(
-              carry, *inputs, training),
-          carry, (tokens, action, reset), unroll=unroll, axis=1)
+      if state_taps is None:
+        carry, (entries, feat) = nj.scan(
+            lambda carry, inputs: self._observe(
+                carry, *inputs, training),
+            carry, (tokens, action, reset), unroll=unroll, axis=1)
+      else:
+        state_taps = nn.cast(state_taps)
+        carry, (entries, feat) = nj.scan(
+            lambda carry, inputs: self._observe(
+                carry, inputs[0], inputs[1], inputs[2], training, inputs[3]),
+            carry, (tokens, action, reset, state_taps),
+            unroll=unroll, axis=1)
       return carry, entries, feat
 
-  def _observe(self, carry, tokens, action, reset, training):
+  def _observe(
+      self, carry, tokens, action, reset, training, state_tap=None):
     deter, stoch, action = nn.mask(
-        (carry['deter'], carry['stoch'], action), ~reset)
+        ((carry['deter'] + state_tap['deter']) if state_tap is not None
+         else carry['deter'],
+         (carry['stoch'] + state_tap['stoch']) if state_tap is not None
+         else carry['stoch'],
+         action), ~reset)
     action = nn.DictConcat(self.act_space, 1)(action)
     action = nn.mask(action, ~reset)
     deter = self._core(deter, stoch, action)
@@ -117,9 +134,10 @@ class RSSM(nj.Module):
       # return carry, entries, feat, action
       return carry, feat, action
 
-  def loss(self, carry, tokens, acts, reset, training):
+  def loss(self, carry, tokens, acts, reset, training, state_taps=None):
     metrics = {}
-    carry, entries, feat = self.observe(carry, tokens, acts, reset, training)
+    carry, entries, feat = self.observe(
+        carry, tokens, acts, reset, training, state_taps=state_taps)
     prior = self._prior(feat['deter'])
     post = feat['logit']
     dyn = self._dist(sg(post)).kl(self._dist(prior))

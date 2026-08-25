@@ -116,4 +116,14 @@ def train(make_agent, make_replay, make_env, make_stream, make_logger, args):
     if should_save(step):
       cp.save()
 
+  if train_agg.reducers or epstats.reducers:
+    logger.add(train_agg.result())
+    logger.add(epstats.result(), prefix='epstats')
+    logger.add(replay.stats(), prefix='replay')
+    logger.add(usage.stats(), prefix='usage')
+    logger.add({'fps/policy': policy_fps.result()})
+    logger.add({'fps/train': train_fps.result()})
+    logger.add({'timer': elements.timer.stats()['summary']})
+  logger.write()
+  cp.save()
   logger.close()

@@ -90,6 +90,13 @@ def setup(
         '--xla_tpu_overlap_compute_collective_tc=true',
         '--xla_enable_async_all_gather=true',
     ]
+  # Preserve deployment-specific flags that were set before Python started.
+  # In particular, module-based CUDA installations can require an explicit
+  # xla_gpu_cuda_data_dir so XLA can locate libdevice. The launch environment
+  # owns that path; the agent configuration only adds its optimization flags.
+  existing_xlaflags = os.environ.get('XLA_FLAGS', '').strip()
+  if existing_xlaflags:
+    xlaflags.insert(0, existing_xlaflags)
   if xlaflags:
     os.environ['XLA_FLAGS'] = ' '.join(xlaflags)
 
@@ -301,4 +308,3 @@ def ckpt_fn(params, compile=True):
 #       'model_node_rank': model_node_rank,
 #       'model_node_size': model_node_size,
 #   }
-
