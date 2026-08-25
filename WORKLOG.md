@@ -696,3 +696,27 @@ small deterministic correctness checks.
   then 17/25/31, then 71, each for exactly 10,000 fresh episodes and with
   `repval_grad=False` carried over as the common acquisition profile. Their
   physical-row budgets remain 130,000; 190,000; 270,000; 330,000; and 730,000.
+
+### 2026-08-25 22:57 UTC - long-run checkpoint I/O falsifier
+
+- Stopped job `5021097` after 10 minutes 54 seconds and before its first
+  15-minute periodic checkpoint. It had logged only 13,220 rows/51 complete
+  episodes, used finite saved gradients at 0.9932 future-message rate, and is
+  retained as an intentionally cancelled infrastructure pilot with no learning
+  interpretation or analyzer result.
+- The saved-gradient replay persists mutable state and adjoint updates. Uniform
+  training eventually marks nearly every replay chunk dirty, so each periodic
+  checkpoint would rewrite an increasing fraction of the projected roughly
+  14 GB replay. Repeating that every 15 minutes could dominate the 12-hour
+  allocation and stress shared storage without adding scientific evidence.
+- Added a validated, provenance-recorded `SAVE_EVERY` launcher input. Toy runs
+  retain the upstream 900-second default unless explicitly overridden. Long
+  no-resume runs use `-1`, which disables periodic saves in `elements.Clock`;
+  the training loop still performs its unconditional final checkpoint after
+  the exact step budget. BSuite defaults to the same final-only behavior because
+  its official environment state is not resumable and every run is fresh.
+- Values other than `-1` or a positive integer are rejected, specifically
+  preventing the dangerous `0` setting, which means save on every loop rather
+  than disable saving. Static shell syntax, default expansion, and diff checks
+  pass. The distance-257 science configuration and budget are otherwise
+  unchanged and will restart in a new log directory from a clean commit.

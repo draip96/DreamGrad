@@ -17,6 +17,7 @@ set -euo pipefail
 RSSM_FREE_NATS=${RSSM_FREE_NATS:-1.0}
 REPVAL_GRAD=${REPVAL_GRAD:-true}
 MODEL_AUX_ENABLED=${MODEL_AUX_ENABLED:-true}
+SAVE_EVERY=${SAVE_EVERY:-900}
 
 ROOT=/project/6101829/draip/DreamGrad
 PYTHON=${ROOT}/.venv/bin/python
@@ -66,6 +67,10 @@ case "${MODEL_AUX_ENABLED}" in
   ) ;;
   *) echo 'MODEL_AUX_ENABLED must be true or false.' >&2; exit 2 ;;
 esac
+if [[ "${SAVE_EVERY}" != -1 && ! "${SAVE_EVERY}" =~ ^[1-9][0-9]*$ ]]; then
+  echo 'SAVE_EVERY must be -1 (final only) or a positive number of seconds.' >&2
+  exit 2
+fi
 test "${DISTANCE}" -ge 1
 test "${STEPS}" -ge $((1000 * (DISTANCE + 2)))
 if test $((STEPS % (DISTANCE + 2))) -ne 0 || test $((STEPS % 10)) -ne 0; then
@@ -110,6 +115,7 @@ sha256sum \
   printf 'RSSM_FREE_NATS=%s\n' "${RSSM_FREE_NATS}"
   printf 'REPVAL_GRAD=%s\n' "${REPVAL_GRAD}"
   printf 'MODEL_AUX_ENABLED=%s\n' "${MODEL_AUX_ENABLED}"
+  printf 'SAVE_EVERY=%s\n' "${SAVE_EVERY}"
   printf 'PYTHONHASHSEED=0\n'
 } > "${LOGDIR}/provenance/environment.txt"
 
@@ -122,6 +128,7 @@ CMD=("${PYTHON}" dreamerv3/main.py \
   --agent.repval_grad "${REPVAL_GRAD_FLAG}" \
   --agent.gradient_cache.enabled "${CACHE_FLAG}" \
   --run.steps "${STEPS}" \
+  --run.save_every "${SAVE_EVERY}" \
   --run.from_checkpoint '' \
   --run.envs 1 \
   --jax.expect_devices 1 \
