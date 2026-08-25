@@ -561,3 +561,30 @@ small deterministic correctness checks.
   (2) `free_nats=0.0`, distance 8, 20,000 rows/2,000 episodes, which directly
   tests cue retention under the KL floor. Neither run loads a checkpoint, and
   neither can be used as curriculum for a later distance.
+
+### 2026-08-25 22:09 UTC - acquisition falsifier wave in progress
+
+- Committed and pushed the first-wave launcher and log as
+  `060ac2800437fb3dc43f1ebc9cbe475df8f40241`. Jobs `5020484` (native distance
+  1) and `5020485` (distance 8 with only `free_nats=0`) started on separate
+  L40S nodes from that clean revision and recorded the same model/environment
+  seed pair as the failed distance-8 controls.
+- Distance-1 job `5020484` reached its exact 6,000-row/2,000-episode budget and
+  intentionally exited 3 after missing the strict policy gate. It was not a
+  flat failure: final terminal reward-sign accuracy was 0.8487, terminal MAE
+  was 0.4254, and tail-1,000 policy accuracy rose to 0.607. This is evidence
+  that the action/reward alignment and native head can begin acquiring the
+  task; the short budget supplied only 4,913 post-prefill optimizer updates.
+- Launched independent job `5020522` from scratch at native distance 1 for
+  15,000 rows/5,000 episodes. It uses no checkpoint from `5020484`, so it is a
+  budget positive control and not curriculum.
+- At the 11,890-row monitoring point, distance-8 job `5020485` remained
+  sign-blind (terminal sign accuracy 0.5042 and MAE 0.9999) even though its KL
+  losses had moved below the old floor to about 0.123. This is interim evidence
+  only; the frozen 20,000-row run remains active and will be analyzed in full.
+- Prepared the next single-variable launcher control, `REPVAL_GRAD=false`.
+  This uses Dreamer's existing stop-gradient switch to prevent the replay-value
+  objective from updating the shared RSSM feature while retaining the value
+  loss, actor, every native world-model loss, replay, precision, optimizer, and
+  12M architecture. The default remains the untouched upstream `true` value,
+  and the resolved setting is added to provenance.
