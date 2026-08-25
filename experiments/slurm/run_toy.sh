@@ -16,6 +16,7 @@ set -euo pipefail
 : "${CACHE_ENABLED:?Set CACHE_ENABLED=true or false.}"
 RSSM_FREE_NATS=${RSSM_FREE_NATS:-1.0}
 REPVAL_GRAD=${REPVAL_GRAD:-true}
+MODEL_AUX_ENABLED=${MODEL_AUX_ENABLED:-true}
 
 ROOT=/project/6101829/draip/DreamGrad
 PYTHON=${ROOT}/.venv/bin/python
@@ -54,6 +55,16 @@ case "${REPVAL_GRAD}" in
   true) REPVAL_GRAD_FLAG=True ;;
   false) REPVAL_GRAD_FLAG=False ;;
   *) echo 'REPVAL_GRAD must be true or false.' >&2; exit 2 ;;
+esac
+case "${MODEL_AUX_ENABLED}" in
+  true) MODEL_AUX_ARGS=() ;;
+  false) MODEL_AUX_ARGS=(
+    --agent.loss_scales.rec 0.0
+    --agent.loss_scales.con 0.0
+    --agent.loss_scales.dyn 0.0
+    --agent.loss_scales.rep 0.0
+  ) ;;
+  *) echo 'MODEL_AUX_ENABLED must be true or false.' >&2; exit 2 ;;
 esac
 test "${DISTANCE}" -ge 1
 test "${STEPS}" -ge $((1000 * (DISTANCE + 2)))
@@ -98,6 +109,7 @@ sha256sum \
   printf 'EFFECTIVE_ENV_SEED=%s\n' "${ENV_SEED}"
   printf 'RSSM_FREE_NATS=%s\n' "${RSSM_FREE_NATS}"
   printf 'REPVAL_GRAD=%s\n' "${REPVAL_GRAD}"
+  printf 'MODEL_AUX_ENABLED=%s\n' "${MODEL_AUX_ENABLED}"
   printf 'PYTHONHASHSEED=0\n'
 } > "${LOGDIR}/provenance/environment.txt"
 
@@ -112,7 +124,8 @@ CMD=("${PYTHON}" dreamerv3/main.py \
   --run.steps "${STEPS}" \
   --run.from_checkpoint '' \
   --run.envs 1 \
-  --jax.expect_devices 1)
+  --jax.expect_devices 1 \
+  "${MODEL_AUX_ARGS[@]}")
 printf '%q ' "${CMD[@]}" > "${LOGDIR}/provenance/command.txt"
 printf '\n' >> "${LOGDIR}/provenance/command.txt"
 "${CMD[@]}"

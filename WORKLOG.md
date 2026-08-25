@@ -588,3 +588,43 @@ small deterministic correctness checks.
   loss, actor, every native world-model loss, replay, precision, optimizer, and
   12M architecture. The default remains the untouched upstream `true` value,
   and the resolved setting is added to provenance.
+
+### 2026-08-25 22:16 UTC - distance-1 positive control passed
+
+- Distance-8 `free_nats=0` job `5020485` completed the full frozen budget and
+  intentionally exited 3. It achieved 0.509 cumulative and 0.518 tail-1,000
+  accuracy; final terminal reward-sign accuracy was 0.5080 and MAE was 0.9996.
+  Its KL losses were no longer clamped at one, so removing the native KL floor
+  was a clean negative result and is not promoted.
+- The independent longer native distance-1 job `5020522` completed normally and
+  passed every predeclared gate. Across 5,000 episodes, final terminal
+  reward-sign accuracy was 0.9960 and MAE was 0.0136. Tail-1,000 policy accuracy
+  was 0.997, tail mean return was 0.994, and the 95% Wilson lower bound was
+  0.9912. This is the first functional learning positive control and confirms
+  the unchanged action alignment, reward head, optimizer, and full agent can
+  solve the task when only one recurrent transition separates cue and query.
+- Committed and pushed the replay-value gradient switch as
+  `94a6523798136aa5dbb35dc34763e63f42794324`, then launched fresh native
+  distance-8 job `5020575` with only `agent.repval_grad=False`. It is a
+  one-variable acquisition diagnostic and does not reuse the successful
+  distance-1 checkpoint.
+
+### 2026-08-25 22:17 UTC - native auxiliary-loss ablation prepared
+
+- At the 11,840-row monitoring point, job `5020575` remained sign-blind after
+  stopping replay-value gradients into the RSSM: terminal reward-sign accuracy
+  was 0.4994 and MAE was 0.9961. The frozen run remains active and this interim
+  result is not substituted for its final artifact.
+- Dreamer's native imagination actor/value inputs are already stopped with
+  `ac_grads=False`; with `repval_grad=False`, every remaining RSSM parameter
+  gradient comes from the world-model objective. Prepared the next exact
+  acquisition ablation by adding `MODEL_AUX_ENABLED=false` to the launcher.
+  It sets only the existing reconstruction, continuation, dynamics-KL, and
+  representation-KL scales to zero. Reward remains the native all-row
+  symexp-TwoHot loss; actor, value, and replay-value training remain enabled.
+- This adds no terminal balancing, new loss, resampling, reward shaping,
+  checkpoint transfer, or saved-gradient special case. The launcher default is
+  the untouched native auxiliary objective and the resolved switch is captured
+  in provenance. The ablation will be a diagnostic until a later matched
+  cache-off/cache-on confirmation establishes whether it is suitable for the
+  no-curriculum long-dependency gate.
