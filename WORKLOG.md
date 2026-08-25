@@ -492,3 +492,72 @@ small deterministic correctness checks.
 - These are the release gates for the implementation commit. The next action is
   the fresh, no-curriculum distance-8 learning control pair; no BSuite run is
   authorized by the protocol until a distance greater than 256 learns.
+
+### 2026-08-25 21:34 UTC - implementation pushed and distance-8 runs started
+
+- Committed the reviewed implementation as
+  `ba01f56b81ab317dbe2ff9f9a4b751524047cca0` (`Implement replay-aligned saved
+  gradients`) and pushed it to `draip96/DreamGrad` on GitHub. The scientific
+  launchers verified an empty Git status and recorded that revision.
+- Initial H100 submissions `5020215` and `5020216` remained pending with zero
+  runtime because of the small long-duration partition queue. Cancelled them
+  before allocation; they created no log directory and contain no result.
+- Submitted the identical frozen distance-8 arms to the already GPU-validated
+  L40S partition instead. Jobs `5020233` (cache disabled) and `5020234` (cache
+  enabled) started simultaneously on separate L40S devices. Each is a fresh
+  20,000-row, 2,000-episode run at seed 9407 with no checkpoint and no
+  curriculum.
+
+### 2026-08-25 21:49 UTC - distance-8 acquisition gate failed in both arms
+
+- Both matched runs reached the exact 20,000-row budget and produced exactly
+  2,000 complete 10-row episodes. Their Slurm state is `FAILED` only because
+  the analyzer intentionally exits 3 when a scientific learning gate is
+  missed; neither run crashed and both wrote a final checkpoint and complete
+  analysis artifact.
+- Cache-disabled job `5020233` achieved 0.5065 cumulative accuracy and 0.505
+  tail-1,000 accuracy (tail mean return 0.010, Wilson lower bound 0.4741).
+  Its final stopped world-model diagnostic was 0.5016 terminal reward-sign
+  accuracy with terminal reward MAE 0.9999.
+- Cache-enabled job `5020234` achieved 0.5130 cumulative accuracy and 0.517
+  tail-1,000 accuracy (tail mean return 0.034, Wilson lower bound 0.4860).
+  Its final stopped world-model diagnostic was 0.5101 terminal reward-sign
+  accuracy with terminal reward MAE 0.9995.
+- The saved-gradient mechanism itself remained numerically healthy in job
+  `5020234`: adjoint finite fraction was 1.0, final future-hit and future-use
+  rates were both 0.8935, future-adjoint RMS was 2.794e-4, and outgoing-adjoint
+  RMS was 3.041e-4. These are health observations, not evidence of learning.
+- Because the cache-disabled within-window control and the cache-enabled arm
+  both failed while the reward model remained at chance, this pair is an
+  acquisition failure upstream of any claim about long-range saved-gradient
+  transport. The failed seed and all artifacts are preserved. A distance-257
+  run and BSuite remain gated off while a cheaper no-curriculum acquisition
+  diagnostic is designed.
+
+### 2026-08-25 22:00 UTC - first acquisition falsifier frozen
+
+- Audited all 2,000 cache-disabled replay episodes. Cue classes were 999/1001,
+  terminal reward classes were 987/1013, query actions were 1,100/900, query
+  and reward rows were exactly `q8` and `q9`, and every episode satisfied
+  `reward(q9) = +1` exactly when `action(q8) == cue(q0)`. This rules out the
+  environment/replay action-shift hypothesis before changing training.
+- The final mean reward loss of 0.1380 is also informative. For the native
+  255-bin symexp-TwoHot head, knowing terminal timing while assigning equal
+  probability to reward signs has an analytic episode-mean loss near 0.1359;
+  a sign-informed head can approach 0.0665. Together with MAE near one, this
+  identifies loss convergence to a sign-blind solution rather than missing
+  terminal examples. The cache-disabled run executed 18,913 optimizer updates.
+- The native KL losses were pinned at the configured `free_nats=1.0` floor.
+  A one-bit cue carries at most `ln(2) < 1` nat, so the cheapest retention
+  falsifier is the existing upstream RSSM setting `free_nats=0.0`; it changes
+  no model equation, replay rule, loss term, saved-gradient rule, or optimizer.
+- Added a validated `RSSM_FREE_NATS` launcher input, defaulting to the untouched
+  upstream value 1.0, and record it in the resolved command and environment
+  provenance. Distinct run roots prevent any diagnostic from reusing a prior
+  log directory.
+- Froze the next independent, fresh, cache-disabled jobs at seed 9407:
+  (1) native `free_nats=1.0`, distance 1, 6,000 rows/2,000 episodes, which tests
+  basic cue/action binding with only one recurrent transition; and
+  (2) `free_nats=0.0`, distance 8, 20,000 rows/2,000 episodes, which directly
+  tests cue retention under the KL floor. Neither run loads a checkpoint, and
+  neither can be used as curriculum for a later distance.

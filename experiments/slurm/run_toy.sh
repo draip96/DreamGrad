@@ -14,6 +14,7 @@ set -euo pipefail
 : "${SEED:?Set model/environment SEED.}"
 : "${STEPS:?Set fresh-run environment STEPS.}"
 : "${CACHE_ENABLED:?Set CACHE_ENABLED=true or false.}"
+RSSM_FREE_NATS=${RSSM_FREE_NATS:-1.0}
 
 ROOT=/project/6101829/draip/DreamGrad
 PYTHON=${ROOT}/.venv/bin/python
@@ -44,6 +45,10 @@ esac
 case "${STEPS}" in
   ''|*[!0-9]*) echo 'STEPS must be a positive integer.' >&2; exit 2 ;;
 esac
+if [[ ! "${RSSM_FREE_NATS}" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]]; then
+  echo 'RSSM_FREE_NATS must be a nonnegative decimal.' >&2
+  exit 2
+fi
 test "${DISTANCE}" -ge 1
 test "${STEPS}" -ge $((1000 * (DISTANCE + 2)))
 if test $((STEPS % (DISTANCE + 2))) -ne 0 || test $((STEPS % 10)) -ne 0; then
@@ -85,6 +90,7 @@ sha256sum \
   printf 'CUDA_VISIBLE_DEVICES=%s\n' "${CUDA_VISIBLE_DEVICES:-}"
   printf 'MODEL_SEED=%s\n' "${SEED}"
   printf 'EFFECTIVE_ENV_SEED=%s\n' "${ENV_SEED}"
+  printf 'RSSM_FREE_NATS=%s\n' "${RSSM_FREE_NATS}"
   printf 'PYTHONHASHSEED=0\n'
 } > "${LOGDIR}/provenance/environment.txt"
 
@@ -93,6 +99,7 @@ CMD=("${PYTHON}" dreamerv3/main.py \
   --configs toy_memory size12m \
   --seed "${SEED}" \
   --env.toymemory.distance "${DISTANCE}" \
+  --agent.dyn.rssm.free_nats "${RSSM_FREE_NATS}" \
   --agent.gradient_cache.enabled "${CACHE_FLAG}" \
   --run.steps "${STEPS}" \
   --run.from_checkpoint '' \
