@@ -739,3 +739,17 @@ small deterministic correctness checks.
 - Added a direct regression test asserting that `LocalClock(0)` stays false and
   `LocalClock(-1)` stays true across repeated calls. This prevents the two clock
   APIs from being confused again before another long allocation.
+
+### 2026-08-25 23:06 UTC - corrected distance-257 run verified
+
+- Committed and pushed the clock correction and regression test as
+  `9aaccd5f5a8d1e87fecace22ab214656cb298425`; the focused clock test passed 2/2.
+- Launched fresh cache-enabled distance-257 job `5021202` on node `kn046` from
+  that clean revision. Its provenance records the unchanged 777,000-row,
+  3,000-episode science configuration and `SAVE_EVERY=0`; no cancelled-run
+  checkpoint or replay is referenced.
+- After compilation and 4,040 rows, the log contained exactly one checkpoint
+  save: the mandatory initial snapshot. A later driver iteration still showed
+  one save line, directly verifying that periodic saving is disabled. Saved
+  adjoints were finite and future-message use was 0.9867. Learning metrics at
+  only 15 complete episodes remain uninterpretable.
