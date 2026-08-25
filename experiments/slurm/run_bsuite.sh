@@ -13,7 +13,7 @@ set -euo pipefail
 : "${MEMORY_LENGTH:?Set official BSuite MEMORY_LENGTH.}"
 : "${SEED:?Set model/environment SEED.}"
 : "${REPVAL_GRAD:?Set REPVAL_GRAD=true or false explicitly.}"
-SAVE_EVERY=${SAVE_EVERY:--1}
+SAVE_EVERY=${SAVE_EVERY:-0}
 
 case "${MEMORY_LENGTH}" in
   11|17|25|31|71) ;;
@@ -27,8 +27,8 @@ case "${REPVAL_GRAD}" in
   false) REPVAL_GRAD_FLAG=False ;;
   *) echo 'REPVAL_GRAD must be true or false.' >&2; exit 2 ;;
 esac
-if [[ "${SAVE_EVERY}" != -1 && ! "${SAVE_EVERY}" =~ ^[1-9][0-9]*$ ]]; then
-  echo 'SAVE_EVERY must be -1 (final only) or a positive number of seconds.' >&2
+if [[ ! "${SAVE_EVERY}" =~ ^[0-9]+$ ]]; then
+  echo 'SAVE_EVERY must be 0 (final only) or a positive number of seconds.' >&2
   exit 2
 fi
 

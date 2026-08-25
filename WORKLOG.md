@@ -720,3 +720,22 @@ small deterministic correctness checks.
   than disable saving. Static shell syntax, default expansion, and diff checks
   pass. The distance-257 science configuration and budget are otherwise
   unchanged and will restart in a new log directory from a clean commit.
+
+### 2026-08-25 23:03 UTC - checkpoint clock convention corrected
+
+- The preceding clock interpretation was wrong for this training path and is
+  superseded by this entry. Dreamer's `train.py` uses `embodied.LocalClock`, not
+  `elements.when.Clock`: `LocalClock(0)` disables a periodic action and every
+  negative interval triggers it on every call.
+- Job `5021163` therefore saved repeatedly after its initial checkpoint. It was
+  stopped after 4 minutes 50 seconds at only 1,410 logged rows/five episodes.
+  The partial directory is 273 MB and retains two checkpoint generations after
+  checkpoint cleanup. It has no analyzer artifact and is an infrastructure
+  non-result.
+- Corrected both launchers so `SAVE_EVERY=0` means final-only and all negative
+  values are rejected. Toy's default remains 900 seconds for short jobs;
+  long ToyMemory passes `0` explicitly, and BSuite defaults to `0`. The training
+  loop's unconditional post-budget `cp.save()` remains unchanged.
+- Added a direct regression test asserting that `LocalClock(0)` stays false and
+  `LocalClock(-1)` stays true across repeated calls. This prevents the two clock
+  APIs from being confused again before another long allocation.

@@ -67,8 +67,8 @@ case "${MODEL_AUX_ENABLED}" in
   ) ;;
   *) echo 'MODEL_AUX_ENABLED must be true or false.' >&2; exit 2 ;;
 esac
-if [[ "${SAVE_EVERY}" != -1 && ! "${SAVE_EVERY}" =~ ^[1-9][0-9]*$ ]]; then
-  echo 'SAVE_EVERY must be -1 (final only) or a positive number of seconds.' >&2
+if [[ ! "${SAVE_EVERY}" =~ ^[0-9]+$ ]]; then
+  echo 'SAVE_EVERY must be 0 (final only) or a positive number of seconds.' >&2
   exit 2
 fi
 test "${DISTANCE}" -ge 1
