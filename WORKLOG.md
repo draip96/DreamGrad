@@ -679,3 +679,20 @@ small deterministic correctness checks.
   25.9-times lower
   terminal-row density relative to distance 8 while leaving a full independent
   1,000-episode tail after the acquisition region suggested by the short gate.
+
+### 2026-08-25 22:46 UTC - no-curriculum distance-257 run started
+
+- Committed and pushed the matched short-gate record as
+  `ffcc2b8de80971dd0f45ee43af7bc5357e637dc7`, then launched cache-enabled
+  distance-257 job `5021097` on the 12-hour L40S partition. It started from that
+  clean revision on node `kn028`; provenance records 777,000 rows, seed 9407,
+  `repval_grad=False`, native world-model auxiliaries, and an empty checkpoint
+  source. This is a literal no-curriculum dependency longer than 256.
+- Hardened the still-gated BSuite launcher to require an explicit
+  `REPVAL_GRAD=true|false`, validate it, pass the canonical boolean to Dreamer,
+  and capture it in provenance. No BSuite job is submitted before `5021097`
+  passes the functional learning gate.
+- If unlocked, the BSuite order remains official constructor lengths 11 first,
+  then 17/25/31, then 71, each for exactly 10,000 fresh episodes and with
+  `repval_grad=False` carried over as the common acquisition profile. Their
+  physical-row budgets remain 130,000; 190,000; 270,000; 330,000; and 730,000.

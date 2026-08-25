@@ -12,6 +12,7 @@ set -euo pipefail
 
 : "${MEMORY_LENGTH:?Set official BSuite MEMORY_LENGTH.}"
 : "${SEED:?Set model/environment SEED.}"
+: "${REPVAL_GRAD:?Set REPVAL_GRAD=true or false explicitly.}"
 
 case "${MEMORY_LENGTH}" in
   11|17|25|31|71) ;;
@@ -19,6 +20,11 @@ case "${MEMORY_LENGTH}" in
 esac
 case "${SEED}" in
   ''|*[!0-9]*) echo 'SEED must be a nonnegative integer.' >&2; exit 2 ;;
+esac
+case "${REPVAL_GRAD}" in
+  true) REPVAL_GRAD_FLAG=True ;;
+  false) REPVAL_GRAD_FLAG=False ;;
+  *) echo 'REPVAL_GRAD must be true or false.' >&2; exit 2 ;;
 esac
 
 ROOT=/project/6101829/draip/DreamGrad
@@ -71,6 +77,7 @@ sha256sum \
   printf 'CUDA_VISIBLE_DEVICES=%s\n' "${CUDA_VISIBLE_DEVICES:-}"
   printf 'MODEL_SEED=%s\n' "${SEED}"
   printf 'EFFECTIVE_ENV_SEED=%s\n' "${ENV_SEED}"
+  printf 'REPVAL_GRAD=%s\n' "${REPVAL_GRAD}"
   printf 'PYTHONHASHSEED=0\n'
 } > "${LOGDIR}/provenance/environment.txt"
 
@@ -79,6 +86,7 @@ CMD=("${PYTHON}" dreamerv3/main.py \
   --configs bsuite size12m \
   --seed "${SEED}" \
   --env.bsuite.memory_length "${MEMORY_LENGTH}" \
+  --agent.repval_grad "${REPVAL_GRAD_FLAG}" \
   --agent.gradient_cache.enabled True \
   --run.steps "${STEPS}" \
   --run.from_checkpoint '' \
