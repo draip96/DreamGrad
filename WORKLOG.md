@@ -651,3 +651,31 @@ small deterministic correctness checks.
   transferred. The budget is not selected from a successful tail statistic:
   it places the predeclared final 1,000 episodes at rows 20,010--30,000, after
   the independently observed roughly 15,000-row acquisition transition.
+
+### 2026-08-25 22:45 UTC - matched distance-8 confirmation passed
+
+- Jobs `5020662` (cache disabled) and `5020663` (cache enabled) both completed
+  normally from clean revision
+  `8777c055ec4979588c5492d5670827ec0161c936`. Their resolved configurations,
+  model/environment seeds, 12M dimensions, 30,000-row budgets, and all
+  acquisition settings match exactly except for saved-gradient enablement.
+- Cache-disabled job `5020662` passed with 0.969 tail-1,000 accuracy, 0.938 tail
+  mean return, and 0.9563 Wilson lower bound. Its final terminal reward-sign
+  accuracy was 0.9824 and terminal MAE was 0.0540.
+- Cache-enabled job `5020663` passed with 0.965 tail-1,000 accuracy, 0.930 tail
+  mean return, and 0.9517 Wilson lower bound. Its final terminal reward-sign
+  accuracy was 0.9826 and terminal MAE was 0.0533. Saved adjoints were 100%
+  finite; final future-hit/use rates were both 0.8971, future-adjoint RMS was
+  5.460e-5, and outgoing-adjoint RMS was 9.484e-5.
+- This qualifies `agent.repval_grad=False` as the common ToyMemory acquisition
+  profile. It is an existing upstream Dreamer switch applied identically to
+  both arms; it does not alter the saved-gradient algorithm, replay sampling,
+  or any world-model loss. The unused auxiliary-loss ablation remains unrun.
+- Froze the first requested greater-than-256 test at literal cue-to-query
+  distance 257 and cue-to-reward dependency 258. The cache-enabled run is fresh
+  seed 9407 with no checkpoint or curriculum and uses 777,000 physical rows:
+  exactly 3,000 episodes of 259 rows. The final 1,000-episode gate therefore
+  has episode endpoints 518,259--777,000. This budget compensates for the
+  25.9-times lower
+  terminal-row density relative to distance 8 while leaving a full independent
+  1,000-episode tail after the acquisition region suggested by the short gate.
