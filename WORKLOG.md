@@ -945,3 +945,9 @@ small deterministic correctness checks.
   `5035079` excluding that node remained pending on the short partition and was
   cancelled at zero runtime. Identical replacement `5035096` is pending on the
   12-hour L40S partition, still excluding `kn161`, with new `audit-v3` output.
+- Follow-up manifest audit found that the two already-added `LocalClock`
+  final-only checkpoint regressions were not listed in `test_core.sh`. Added
+  them to both its source checksum and pytest command; they pass 2/2 locally.
+  The next/final authoritative CUDA run will therefore contain 40 tests. This
+  does not invalidate the 38-test pass, but it prevents that pass from being
+  presented as the eventual final manifest.
