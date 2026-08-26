@@ -774,3 +774,32 @@ small deterministic correctness checks.
   acquisition setting `repval_grad=False`, `SAVE_EVERY=0`, 130,000 physical
   rows, and no checkpoint source. Lengths 17, 25, 31, and 71 remain unqueued;
   length 11 must pass before spending on them.
+
+### 2026-08-26 15:53 UTC - first distance-257 gate failed
+
+- Job `5021202` completed all 777,000 requested rows (exactly 3,000 episodes)
+  in 8:32:05 and wrote its unconditional final checkpoint. The log contains
+  exactly two saves, the initial and final snapshots, so final-only checkpoint
+  behavior remained correct throughout the run.
+- The formal analyzer intentionally returned exit 3. Cumulative accuracy was
+  0.481 and mean return -0.038; the final 1,000 episodes had accuracy 0.475,
+  mean return -0.050, and a 0.4442 Wilson lower bound. All three prespecified
+  learning gates failed. The final 200 episodes were also chance-level at
+  0.460 accuracy, so this is not a tail-boundary artifact.
+- The mechanism remained healthy but did not yield functional policy learning:
+  final adjoint-finite fraction was 1.0, future-message hit/use rates were both
+  0.9954, outgoing/future adjoint RMS values were 7.234e-4 and 7.477e-4, and
+  no runtime, device, or non-finite error occurred. Terminal reward-sign
+  accuracy rose late to 0.8562 and terminal MAE fell to 0.3734, while behavior
+  remained at chance. This is therefore a preserved learner failure, not proof
+  of a cache transport defect or a passing greater-than-256 dependency.
+- Dependent BSuite length-11 job `5024478` never allocated or executed and was
+  cancelled automatically after the failed `afterok:5021202` dependency. It
+  produced no log directory or scientific result. BSuite remains locked.
+- The next cheap falsifier is a fresh cache-enabled distance-65 run: it places
+  the cue and query on opposite sides of the native 64-step learner span while
+  requiring only 201,000 rows for the same 3,000 independent episodes. If that
+  passes, distance 129 localizes the transition across two spans before any
+  larger distance-257 budget. Every localization run starts from random
+  initialization with the same task throughout; none supplies a checkpoint or
+  curriculum to a later run.
