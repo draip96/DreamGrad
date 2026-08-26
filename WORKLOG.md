@@ -1010,3 +1010,7 @@ small deterministic correctness checks.
   and final-only checkpointing. The exact budget is 195,000 rows = 3,000
   episodes. No optimizer, learning-rate, architecture, loss-scale, replay, or
   cache setting differs from the distance-65 arm.
+- Launched that control as Slurm job `5035321` on L40S node `kn033`, excluding
+  the known-ECC node. Its recorded source revision is
+  `30218981a7959441f3d734815b35af66d7a7984d` and its recorded launch-time tree
+  is clean.
