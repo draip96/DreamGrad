@@ -1208,3 +1208,54 @@ small deterministic correctness checks.
 - Both are interim chance-level snapshots, not formal failed gates. Neither
   run contains the new source or enables posterior-row keys. No keyed or
   full-BPTT scientific run has been launched.
+
+### 2026-08-26 18:17 UTC - distance-65 gate failed; keyed code qualified
+
+- Fresh distance-65 job `5034470` completed exactly 201,000 physical rows and
+  3,000 episodes, wrote final checkpoint `20260826T140910F939419`, and then
+  exited with status 3 solely because the predeclared analyzer gate failed.
+  Cumulative accuracy was 0.498. The final 1,000 episodes had accuracy 0.502,
+  mean return 0.004, and Wilson lower bound 0.4711, versus required values
+  0.95, 0.90, and greater than 0.90. This is a formal acquisition failure.
+- The completed run was operationally healthy: final adjoints were 100%
+  finite, future-hit and future-use rates were both 0.98385, outgoing/future
+  adjoint RMS values were `1.922e-4` and `1.090e-4`, and terminal reward-sign
+  accuracy was 0.5115 with MAE 0.9945. These establish cache activity but not
+  learning and do not identify the failed mechanism.
+- Revision-locked L40S core job `5036002` then passed the complete expanded
+  55-test CUDA manifest in 172.02 seconds on `kn104`. It recorded exact clean
+  revision `b9ecaaf559cd3c3407c37d0772c5f89f36d9a666`, an empty status and
+  patch, and a `TESTS_PASSED` marker at `2026-08-26T18:14:01Z`.
+- Dependent end-to-end job `5036003` completed in 2 minutes 34 seconds from the
+  same exact clean revision. Cache-off, ordinary cache-on, and
+  `cache-true-posterior-keys` arms each reached 100 rows, 53 learner updates,
+  final checkpoint, replay reload, and finite validation. The keyed arm alone
+  persisted `rng/posterior` on every replay chunk with dtype `uint32` and
+  trailing dimension 2; it retained 85 valid adjoint rows and reached future
+  use 0.8. The original unkeyed pair still passes the exact matched-config
+  comparison. `INTEGRATION_PASSED` is stamped `2026-08-26T18:16:35Z`.
+- These are implementation/mechanism qualifications only. No keyed learning
+  experiment has started, and the failed unkeyed distance-65 result is not
+  relabeled by them.
+
+### 2026-08-26 18:18 UTC - predeclared full-BPTT acquisition control started
+
+- The first L40S submission requested 12 hours and was rejected by `sbatch`
+  before job creation because that partition's hard limit is 3 hours. This was
+  a scheduler-only rejection with no run directory or scientific artifact.
+- Resubmitted within the partition limit as job `5036175`, now running on L40S
+  node `kn060` from exact clean, pushed, CUDA-qualified revision
+  `b9ecaaf559cd3c3407c37d0772c5f89f36d9a666`. Provenance records an empty
+  launch-time Git status and no checkpoint source.
+- Relative to failed cache job `5034470`, exactly three scientific settings
+  differ: `gradient_cache.enabled=False`, `replay_context=0`, and
+  `batch_length=133`. Posterior RNG keys remain false. Seed 9407, distance 65,
+  201,000 rows/3,000 episodes, batch size 16, train ratio 1024,
+  `repval_grad=False`, free nats 1.0, all native model losses, uniform replay,
+  one environment, and final-only saving are unchanged. Artifacts use the
+  isolated root `runs/localization/full-bptt-batch133-context0`.
+- This control asks whether the 12M Dreamer can acquire the distance-65 task
+  when every sampled 133-row sequence is guaranteed to contain at least one
+  complete 67-row episode and the cue-to-reward path is literally
+  differentiable. It must pass the same final-1,000 learning gate before a
+  posterior-key cache run can be interpreted causally.
