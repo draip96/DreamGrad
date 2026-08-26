@@ -954,3 +954,44 @@ small deterministic correctness checks.
 - Queued 40-test CUDA job `5035220` with `afterany:5035096`, still excluding
   `kn161`, so it will run as soon as the read-only audit releases the second
   GPU regardless of the audit's scientific outcome.
+
+### 2026-08-26 16:34 UTC - failed distance-257 checkpoint audit completed
+
+- Corrected read-only audit job `5035096` completed on healthy L40S node
+  `kn033` in 2:26 and wrote the new immutable target
+  `runs/audits/distance-257-failed-seed9407/audit-v3.json`. It verified the
+  exact 777,000-row, 3,000-episode checkpoint/replay pair and reports that it
+  called neither `Agent.train()` nor `Replay.update()` and did not modify the
+  source artifact.
+- Exact replay behavior was chance: 1,443 positive versus 1,557 negative
+  terminal rewards (0.481 accuracy), with both cues well covered but an action
+  imbalance of 1,912 versus 1,088. Conditional on cached query states, the
+  current policy reached only 0.591 argmax accuracy and 0.592 expected sampled
+  accuracy. Its very low mean entropy (0.054 nats) therefore reflects a mostly
+  confident biased policy, not acquisition of the dependency.
+- The stochastic-prior counterfactual audit was above chance but insufficient:
+  the model-greedy action was correct for 0.649 of cached states and 0.643 of
+  full-current posterior reconstructions. Cached-state and full-current
+  posterior policy accuracies were similarly weak (0.591 and 0.576). This
+  similarity does not establish equivalence to historical training states,
+  whose parameter versions and RNG keys were never stored, but it gives no
+  evidence that merely reconstructing states under the final parameters
+  restores the missing behavior.
+- The held-out nearest-centroid cue probe was at chance for `deter`, `stoch`,
+  and their concatenation in both cached and full-current states (balanced
+  accuracies 0.504--0.506 and 0.489--0.492). This is evidence only against
+  simple linear cue separability, not proof that all cue information is absent.
+  Together with the weak policy and counterfactual results, it localizes the
+  failed gate to an insufficiently usable query representation/model-policy
+  signal rather than a runtime error. It does not identify cache transport as
+  the cause and cannot convert the failed distance-257 run into a pass.
+
+### 2026-08-26 16:34 UTC - final focused CUDA manifest passed
+
+- Authoritative job `5035220` ran on healthy L40S node `kn054` and passed the
+  corrected complete manifest: 40/40 tests in 98.36 seconds. This adds the two
+  final-only checkpoint clock regressions to all coverage already established
+  by the 38-test pass, including the frozen actual-RSSM/actual-Replay
+  258-transition reverse-sweep oracle. Source revision for the queued job was
+  `b834432c7cd127ad60e88c417ec1faa4cd344591`; the later worklog-only queue
+  record does not change tested code.
