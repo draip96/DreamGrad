@@ -1080,3 +1080,35 @@ small deterministic correctness checks.
 - Static `bash -n` validation passes. Clean-tree guard probes also confirmed
   that a nonnumeric `BATCH_LENGTH` and cache-on `REPLAY_CONTEXT=0` are both
   rejected with exit status 2 before modules, directories, or training start.
+
+### 2026-08-26 17:12 UTC - stochastic endpoint mismatch made exact
+
+- Added `tests/test_stochastic_endpoint_cache.py`, a frozen-parameter,
+  actual-RSSM/actual-Replay categorical enumeration oracle. Its two overlapping
+  windows contain three transitions each over physical rows `q0..q4`; this is
+  the smallest tested nonlinear fixture where an independently redrawn
+  pre-endpoint category changes the deterministic boundary state and exposes
+  the missing covariance. A two-transition endpoint-only draw was correctly
+  rejected during construction because its expected straight-through
+  Jacobian happened to be category-independent.
+- The oracle enumerates all 16 coherent full trajectories and all 64 producer/
+  consumer category combinations. With independent overlap draws, the expected
+  cached `G_q0` differs from the expected native full-BPTT straight-through
+  estimator by more than a predeclared 5% relative-L2 threshold. When every
+  physical row reuses one coherent categorical outcome, all 16 paths match
+  full BPTT separately for `deter` and `stoch` at relative L2 below `1e-5` and
+  cosine above `0.99999`.
+- The same test uses production `_gradient_cache_payloads()` and actual Replay
+  chunks of size two. It asserts that a producer payload is invisible before
+  `Replay.update()` and exactly visible afterward. The only test shim mirrors
+  `RSSM._observe()` to supply an explicit enumerated category while still
+  calling the actual RSSM core/posterior layers and production OneHot
+  straight-through helper; production training code remains unchanged.
+- The delegated explicit-CPU check passed 1/1 in 44.11 seconds and diff checks
+  passed. Added the oracle to both the focused CUDA manifest checksum and its
+  pytest command; an independent local rerun and authoritative Slurm rerun are
+  still required before this becomes release evidence.
+- Independent explicit-CPU reproduction passed 1/1 in 43.38 seconds. The full
+  expanded focused manifest then passed 41/41 locally in 111.80 seconds. These
+  remain deterministic local correctness checks; the new 41-test manifest has
+  not yet passed on CUDA through Slurm.

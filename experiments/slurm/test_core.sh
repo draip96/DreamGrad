@@ -44,6 +44,7 @@ sha256sum \
   tests/test_gradient_cache_oracle.py \
   tests/test_iterative_gradient_cache.py \
   tests/test_rssm_gradient_cache_oracle.py \
+  tests/test_stochastic_endpoint_cache.py \
   embodied/tests/test_gradient_cache_replay.py \
   embodied/tests/test_mixed_grad.py \
   embodied/tests/test_memory_envs.py \
@@ -61,6 +62,7 @@ export PYTHONNOUSERSITE=1
   tests/test_gradient_cache_oracle.py \
   tests/test_iterative_gradient_cache.py \
   tests/test_rssm_gradient_cache_oracle.py \
+  tests/test_stochastic_endpoint_cache.py \
   embodied/tests/test_gradient_cache_replay.py \
   embodied/tests/test_mixed_grad.py \
   embodied/tests/test_memory_envs.py \
