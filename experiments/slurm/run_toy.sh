@@ -18,6 +18,8 @@ RSSM_FREE_NATS=${RSSM_FREE_NATS:-1.0}
 REPVAL_GRAD=${REPVAL_GRAD:-true}
 MODEL_AUX_ENABLED=${MODEL_AUX_ENABLED:-true}
 SAVE_EVERY=${SAVE_EVERY:-900}
+BATCH_LENGTH=${BATCH_LENGTH:-64}
+REPLAY_CONTEXT=${REPLAY_CONTEXT:-1}
 
 ROOT=/project/6101829/draip/DreamGrad
 PYTHON=${ROOT}/.venv/bin/python
@@ -71,8 +73,19 @@ if [[ ! "${SAVE_EVERY}" =~ ^[0-9]+$ ]]; then
   echo 'SAVE_EVERY must be 0 (final only) or a positive number of seconds.' >&2
   exit 2
 fi
+case "${BATCH_LENGTH}" in
+  ''|*[!0-9]*) echo 'BATCH_LENGTH must be a positive integer.' >&2; exit 2 ;;
+esac
+case "${REPLAY_CONTEXT}" in
+  ''|*[!0-9]*) echo 'REPLAY_CONTEXT must be a nonnegative integer.' >&2; exit 2 ;;
+esac
 test "${DISTANCE}" -ge 1
 test "${STEPS}" -ge $((1000 * (DISTANCE + 2)))
+test "${BATCH_LENGTH}" -ge 1
+if test "${CACHE_ENABLED}" = true && test "${REPLAY_CONTEXT}" -ne 1; then
+  echo 'CACHE_ENABLED=true requires REPLAY_CONTEXT=1.' >&2
+  exit 2
+fi
 if test $((STEPS % (DISTANCE + 2))) -ne 0 || test $((STEPS % 10)) -ne 0; then
   echo 'STEPS must end on both an episode boundary and driver block.' >&2
   exit 2
@@ -116,6 +129,8 @@ sha256sum \
   printf 'REPVAL_GRAD=%s\n' "${REPVAL_GRAD}"
   printf 'MODEL_AUX_ENABLED=%s\n' "${MODEL_AUX_ENABLED}"
   printf 'SAVE_EVERY=%s\n' "${SAVE_EVERY}"
+  printf 'BATCH_LENGTH=%s\n' "${BATCH_LENGTH}"
+  printf 'REPLAY_CONTEXT=%s\n' "${REPLAY_CONTEXT}"
   printf 'PYTHONHASHSEED=0\n'
 } > "${LOGDIR}/provenance/environment.txt"
 
@@ -127,6 +142,8 @@ CMD=("${PYTHON}" dreamerv3/main.py \
   --agent.dyn.rssm.free_nats "${RSSM_FREE_NATS}" \
   --agent.repval_grad "${REPVAL_GRAD_FLAG}" \
   --agent.gradient_cache.enabled "${CACHE_FLAG}" \
+  --batch_length "${BATCH_LENGTH}" \
+  --replay_context "${REPLAY_CONTEXT}" \
   --run.steps "${STEPS}" \
   --run.save_every "${SAVE_EVERY}" \
   --run.from_checkpoint '' \

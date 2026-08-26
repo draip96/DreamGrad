@@ -1049,3 +1049,17 @@ small deterministic correctness checks.
   learner semantics/config under a tested mechanical refactor rather than as a
   byte-identical source artifact. Any further training-source change before
   allocation would require cancelling and requeuing it.
+
+### 2026-08-26 16:59 UTC - full-BPTT diagnostic interface prepared
+
+- Source geometry review clarified that increasing a context-one learner span
+  still begins from detached cached `S_q0`; it is not literal full BPTT through
+  the cue observation. A genuine oracle must set `replay_context=0` so the
+  reset cue itself is inside the differentiable learner sequence, disable the
+  gradient cache, and include a complete `q0..q_(d+1)` episode.
+- Added guarded, recorded `BATCH_LENGTH` and `REPLAY_CONTEXT` environment knobs
+  to the toy launcher. Their defaults remain exactly 64 and 1, respectively,
+  and cache-on launches explicitly reject any context other than 1. Existing
+  production/localization commands are therefore unchanged. These knobs are
+  solely to make a possible cache-off full-BPTT diagnostic auditable; no such
+  experiment has been launched, and the running 63/65 jobs are unaffected.
