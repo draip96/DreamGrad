@@ -43,19 +43,30 @@ sha256sum \
   experiments/check_integration.py \
   > "${RUN}/provenance/source-sha256.txt"
 
-for CACHE_ENABLED in false true; do
-  if test "${CACHE_ENABLED}" = true; then
-    CACHE_FLAG=True
-  else
-    CACHE_FLAG=False
-  fi
-  LOGDIR=${RUN}/cache-${CACHE_ENABLED}
+for ARM in cache-false cache-true cache-true-posterior-keys; do
+  case "${ARM}" in
+    cache-false)
+      CACHE_FLAG=False
+      POSTERIOR_RNG_KEYS_FLAG=False
+      ;;
+    cache-true)
+      CACHE_FLAG=True
+      POSTERIOR_RNG_KEYS_FLAG=False
+      ;;
+    cache-true-posterior-keys)
+      CACHE_FLAG=True
+      POSTERIOR_RNG_KEYS_FLAG=True
+      ;;
+  esac
+  LOGDIR=${RUN}/${ARM}
   "${PYTHON}" dreamerv3/main.py \
     --logdir "${LOGDIR}" \
     --configs toy_memory size12m \
     --seed 9407 \
     --env.toymemory.distance 8 \
     --agent.gradient_cache.enabled "${CACHE_FLAG}" \
+    --agent.gradient_cache.posterior_rng_keys \
+      "${POSTERIOR_RNG_KEYS_FLAG}" \
     --agent.report False \
     --batch_size 2 \
     --batch_length 16 \
@@ -72,16 +83,16 @@ for CACHE_ENABLED in false true; do
     --run.debug True \
     --jax.prealloc False \
     --jax.expect_devices 1 \
-    2>&1 | tee "${RUN}/cache-${CACHE_ENABLED}.log"
+    2>&1 | tee "${RUN}/${ARM}.log"
 
-  if test "${CACHE_ENABLED}" = true; then
+  if test "${CACHE_FLAG}" = True; then
     "${PYTHON}" experiments/check_integration.py \
       "${LOGDIR}" --cache-enabled \
-      > "${RUN}/cache-${CACHE_ENABLED}-validation.json"
+      > "${RUN}/${ARM}-validation.json"
   else
     "${PYTHON}" experiments/check_integration.py \
       "${LOGDIR}" \
-      > "${RUN}/cache-${CACHE_ENABLED}-validation.json"
+      > "${RUN}/${ARM}-validation.json"
   fi
 done
 

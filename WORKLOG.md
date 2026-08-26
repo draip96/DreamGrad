@@ -1133,3 +1133,72 @@ small deterministic correctness checks.
   has been launched or enabled. The categorical oracle establishes a possible
   estimator mismatch; it does not override the cheaper acquisition controls or
   prove that mismatch causes these online trajectories.
+
+### 2026-08-26 17:27 UTC - distance-129 dependency provenance reset
+
+- Cancelled dependency-held distance-129 job `5034475` at zero runtime before
+  starting default-off posterior-key implementation work. Slurm confirms
+  `CANCELLED` with elapsed `00:00:00`; it created no run artifact.
+- The original job would have read whichever checkout was current when its
+  distance-65 dependency released, so retaining it across production-source
+  preparation would violate exact source provenance even if the new branch
+  stayed disabled. If distance 65 passes, the identical fresh/no-checkpoint
+  393,000-row distance-129 experiment will be requeued only after the relevant
+  revision is clean, pushed, and CUDA-validated.
+
+### 2026-08-26 17:40 UTC - default-off posterior-row RNG-key preparation
+
+- Cancelled dependency-held core-test job `5035858` at zero runtime before
+  integrating the posterior-key source and expanded test manifest. Slurm
+  reports `CANCELLED` with elapsed `00:00:00`. A replacement will be submitted
+  only from the clean integrated revision, so the recorded checkout and tested
+  sources cannot drift while the distance-65 dependency is running.
+- Added the named, default-off switch
+  `agent.gradient_cache.posterior_rng_keys=False`. Enabling it requires both
+  saved gradients and `replay_context=1`; no age, version, rejection, priority,
+  resampling, damping, clipping, warmup, or other freshness mechanism was
+  added. No scientific run has enabled this switch.
+- When explicitly enabled for a fresh run, policy inference consumes the same
+  single Ninjax RNG slot as the native posterior sampler, derives one immutable
+  `uint32[2]` key per physical replay row, samples that row's posterior with
+  the key, and stores it as `rng/posterior`. Learner and report reconstruction
+  reuse the row key with current logits. The field is excluded defensively
+  from all state/adjoint replay-update payloads, so overlapping writes cannot
+  mutate it. Existing agent checkpoints remain parameter-compatible; replay
+  created without the field is intentionally rejected when the switch is on,
+  so this mode requires a fresh replay/run.
+- Added direct Agent validation/wiring tests, RSSM seed-invariance, batch-
+  permutation, suffix, straight-through, and overlapping-window endpoint tests,
+  plus replay overlap/save/reload immutability coverage. The endpoint test uses
+  the production RSSM sampler and verifies that shared physical-row keys make
+  reconstructed q3 identical and recover the coherent full-BPTT q0 message.
+  Added both new test modules to the Slurm checksum and pytest manifest.
+- Extended the toy launcher with the default-preserving
+  `POSTERIOR_RNG_KEYS=false` variable. Explicit keyed runs receive a distinct
+  `cache-true-posterior-keys` artifact arm and record the switch in both the
+  resolved command and environment. This prepares a controlled mechanism
+  ablation only; the pending distance-63/distance-65 acquisition gates and the
+  predeclared full-BPTT control retain the unkeyed default.
+- Explicit-CPU integration validation passed 34/34 focused posterior-key,
+  replay-persistence, and profile tests in 20.62 seconds. The complete expanded
+  focused manifest then passed 55/55 in 130.97 seconds. `py_compile`, `bash -n`,
+  and `git diff --check` also pass. These are local deterministic checks; CUDA
+  qualification remains required before any keyed scientific launch.
+- Expanded the end-to-end CUDA integration script from the unchanged matched
+  cache-off/cache-on pair to include a third fresh
+  `cache-true-posterior-keys` smoke arm. Its validator requires the generated
+  replay field on every loaded chunk with dtype `uint32` and trailing shape 2;
+  the two default arms require that field to be absent. The original unkeyed
+  pair remains the only pair used by the no-extra-config-difference assertion.
+  The updated checker also revalidated both saved artifacts from integration
+  job `5020183` and their matched-config comparison.
+
+### 2026-08-26 17:44 UTC - live localization snapshot after integration
+
+- Distance 65 job `5034470` remains in progress at 2,433/3,000 episodes:
+  cumulative accuracy 0.499, last-200 0.520, and last-100 0.540.
+- Distance 63 job `5035321` remains in progress at 1,436/3,000 episodes:
+  cumulative accuracy 0.510, last-200 0.470, and last-100 0.470.
+- Both are interim chance-level snapshots, not formal failed gates. Neither
+  run contains the new source or enables posterior-row keys. No keyed or
+  full-BPTT scientific run has been launched.

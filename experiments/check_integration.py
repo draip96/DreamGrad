@@ -83,6 +83,9 @@ def load_replay(logdir, cache_enabled, config):
 def validate(logdir, cache_enabled):
   assert logdir.exists(), logdir
   config = load_config(logdir)
+  posterior_rng_keys = bool(
+      config['agent']['gradient_cache'].get('posterior_rng_keys', False))
+  assert not posterior_rng_keys or cache_enabled
   assert any(logdir.glob('ckpt*')), f'Missing checkpoint in {logdir}'
   update_count = load_update_count(logdir, config['run']['steps'])
   rows = load_metrics(logdir)
@@ -103,12 +106,22 @@ def validate(logdir, cache_enabled):
                for chunk in chunks)
 
   grad_keys = {'grad/deter', 'grad/stoch', 'grad/valid'}
+  posterior_key = 'rng/posterior'
+  if posterior_rng_keys:
+    assert posterior_key in common_keys
+    arrays = np.concatenate([
+        chunk.data[posterior_key][:chunk.length] for chunk in chunks])
+    assert arrays.dtype == np.uint32, arrays.dtype
+    assert arrays.shape[-1] == 2, arrays.shape
+  else:
+    assert posterior_key not in all_keys
   if not cache_enabled:
     assert not (all_keys & grad_keys), all_keys & grad_keys
     assert not any(
         key.startswith('train/cache/') for row in rows for key in row)
     return {
         'cache_enabled': False,
+        'posterior_rng_keys': False,
         'updates': update_count,
         'replay_items_after_reload': len(replay),
     }
@@ -131,6 +144,7 @@ def validate(logdir, cache_enabled):
   assert finite and min(finite) == 1.0, finite
   return {
       'cache_enabled': True,
+      'posterior_rng_keys': posterior_rng_keys,
       'updates': update_count,
       'replay_items_after_reload': len(replay),
       'valid_adjoint_rows': int(valid.sum()),

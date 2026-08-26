@@ -9,7 +9,7 @@ import numpy as np
 import embodied
 
 
-def _step(index, with_grad=True):
+def _step(index, with_grad=True, with_rng=False):
   step = {
       'marker': np.asarray(index, np.int32),
       'is_first': np.asarray(index == 0, bool),
@@ -24,6 +24,8 @@ def _step(index, with_grad=True):
         'grad/stoch': np.asarray([[-index]], np.float32),
         'grad/valid': np.asarray(False, bool),
     })
+  if with_rng:
+    step['rng/posterior'] = np.asarray([index, index + 1000], np.uint32)
   return step
 
 
@@ -31,6 +33,15 @@ def _first_sequence(replay):
   chunkid, index = next(iter(replay.items.values()))
   parts = replay._getseq(chunkid, index, concat=False)
   return replay._assemble_batch([parts], 0, replay.length)
+
+
+def _sequence_starting_at(replay, marker):
+  for chunkid, index in replay.items.values():
+    parts = replay._getseq(chunkid, index, concat=False)
+    sequence = replay._assemble_batch([parts], 0, replay.length)
+    if sequence['marker'][0, 0] == marker:
+      return sequence
+  raise AssertionError(f'No replay sequence starts at marker {marker}.')
 
 
 class TestGradientCacheReplay:
@@ -185,6 +196,58 @@ class TestGradientCacheReplay:
       np.testing.assert_array_equal(loaded['dyn/deter'][:, 1:, 0], [[51, 52, 53]])
       np.testing.assert_array_equal(loaded['grad/deter'][:, :-1, 0], [[61, 62, 63]])
       np.testing.assert_array_equal(loaded['grad/valid'], [[True, True, True, False]])
+
+  def test_posterior_rng_survives_overlapping_updates_and_save_reload(self):
+    with tempfile.TemporaryDirectory() as directory:
+      replay = embodied.replay.Replay(
+          length=4, capacity=32, chunksize=16, directory=directory,
+          save_wait=True, persist_updates=True, atomic_updates=True,
+          online=False, seed=27)
+      for index in range(8):
+        replay.add(_step(index, with_rng=True))
+      replay.save()
+
+      first = _sequence_starting_at(replay, 0)
+      second = _sequence_starting_at(replay, 1)
+      first_keys = first['rng/posterior'].copy()
+      second_keys = second['rng/posterior'].copy()
+      stepids = np.concatenate((first['stepid'], second['stepid']), 0)
+      state_payload = {
+          'stepid': stepids[:, 1:].copy(),
+          'dyn/deter': np.arange(6, dtype=np.float32).reshape(2, 3, 1) + 51,
+      }
+      grad_payload = {
+          'stepid': stepids[:, :-1].copy(),
+          'grad/deter': np.arange(6, dtype=np.float32).reshape(2, 3, 1) + 71,
+          'grad/valid': np.ones((2, 3), bool),
+      }
+      assert all(
+          'rng/posterior' not in payload
+          for payload in (state_payload, grad_payload))
+      replay.update((state_payload, grad_payload))
+
+      updated_first = _sequence_starting_at(replay, 0)
+      updated_second = _sequence_starting_at(replay, 1)
+      np.testing.assert_array_equal(
+          updated_first['rng/posterior'], first_keys)
+      np.testing.assert_array_equal(
+          updated_second['rng/posterior'], second_keys)
+      np.testing.assert_array_equal(
+          updated_first['rng/posterior'][:, 1:],
+          updated_second['rng/posterior'][:, :-1])
+      assert np.any(updated_first['dyn/deter'] != first['dyn/deter'])
+      assert np.any(updated_first['grad/deter'] != first['grad/deter'])
+      replay.save()
+
+      restored = embodied.replay.Replay(
+          length=4, capacity=32, chunksize=16, directory=directory,
+          save_wait=True, persist_updates=True, atomic_updates=True,
+          online=False, seed=27)
+      restored.load()
+      np.testing.assert_array_equal(
+          _sequence_starting_at(restored, 0)['rng/posterior'], first_keys)
+      np.testing.assert_array_equal(
+          _sequence_starting_at(restored, 1)['rng/posterior'], second_keys)
 
   def test_sampler_cannot_observe_half_of_paired_update(self):
     replay = embodied.replay.Replay(

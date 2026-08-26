@@ -19,12 +19,38 @@ sample = lambda xs: jax.tree.map(lambda x: x.sample(nj.seed()), xs)
 prefix = lambda xs, p: {f'{p}/{k}': v for k, v in xs.items()}
 concat = lambda xs, a: jax.tree.map(lambda *x: jnp.concatenate(x, a), *xs)
 isimage = lambda s: s.dtype == np.uint8 and len(s.shape) == 3
+_POSTERIOR_KEY = 'rng/posterior'
+
+
+def _replay_posterior_keys(data, enabled):
+  """Validate immutable physical-row posterior keys and remove the prefix."""
+  if not enabled:
+    return None
+  if _POSTERIOR_KEY not in data:
+    raise ValueError(
+        f"Missing required replay field '{_POSTERIOR_KEY}' while "
+        'gradient_cache.posterior_rng_keys is enabled.')
+  keys = data[_POSTERIOR_KEY]
+  expected = (*data['is_first'].shape, 2)
+  if keys.shape != expected:
+    raise ValueError(
+        f"Replay field '{_POSTERIOR_KEY}' must have shape {expected}, "
+        f'got {keys.shape}.')
+  if np.dtype(keys.dtype) != np.dtype(np.uint32):
+    raise ValueError(
+        f"Replay field '{_POSTERIOR_KEY}' must have dtype uint32, "
+        f'got {keys.dtype}.')
+  return keys[:, 1:]
 
 
 def _gradient_cache_payloads(stepid, state_updates, grad_updates):
   """Align learner states and incoming adjoints with physical replay rows."""
-  state_fields = {k: v for k, v in state_updates.items() if k != 'stepid'}
-  grad_fields = {k: v for k, v in grad_updates.items() if k != 'stepid'}
+  state_fields = {
+      k: v for k, v in state_updates.items()
+      if k not in ('stepid', _POSTERIOR_KEY)}
+  grad_fields = {
+      k: v for k, v in grad_updates.items()
+      if k not in ('stepid', _POSTERIOR_KEY)}
   leading_grad = {
       'stepid': stepid[:, :1],
       **{k: v[:, :1] for k, v in grad_fields.items()},
@@ -58,6 +84,14 @@ class Agent(embodied.jax.Agent):
     self.obs_space = obs_space
     self.act_space = act_space
     self.config = config
+    self.posterior_rng_keys = bool(getattr(
+        config.gradient_cache, 'posterior_rng_keys', False))
+    if self.posterior_rng_keys and not config.gradient_cache.enabled:
+      raise ValueError(
+          'gradient_cache.posterior_rng_keys requires saved gradients.')
+    if self.posterior_rng_keys and config.replay_context != 1:
+      raise ValueError(
+          'gradient_cache.posterior_rng_keys requires replay_context=1.')
     if config.gradient_cache.enabled and config.replay_context != 1:
       raise ValueError('Saved gradients require replay_context=1.')
 
@@ -129,6 +163,8 @@ class Agent(embodied.jax.Agent):
               np.float32, (self.dyn.stoch, self.dyn.classes)),
           'valid': elements.Space(bool),
       })))
+    if self.posterior_rng_keys:
+      spaces[_POSTERIOR_KEY] = elements.Space(np.uint32, (2,))
     return spaces
 
   def init_policy(self, batch_size):
@@ -150,8 +186,18 @@ class Agent(embodied.jax.Agent):
     kw = dict(training=False, single=True)
     reset = obs['is_first']
     enc_carry, enc_entry, tokens = self.enc(enc_carry, obs, reset, **kw)
-    dyn_carry, dyn_entry, feat = self.dyn.observe(
-        dyn_carry, tokens, prevact, reset, **kw)
+    posterior_keys = None
+    if self.posterior_rng_keys:
+      # Consume one Ninjax RNG slot, exactly as the native posterior sampler
+      # does, then derive one replay-stored key for each physical batch row.
+      posterior_keys = jax.random.split(nj.seed(), len(reset))
+      assert posterior_keys.shape == (len(reset), 2), posterior_keys.shape
+      assert posterior_keys.dtype == jnp.uint32, posterior_keys.dtype
+      dyn_carry, dyn_entry, feat = self.dyn.observe(
+          dyn_carry, tokens, prevact, reset, posterior_keys=posterior_keys, **kw)
+    else:
+      dyn_carry, dyn_entry, feat = self.dyn.observe(
+          dyn_carry, tokens, prevact, reset, **kw)
     dec_entry = {}
     if dec_carry:
       dec_carry, dec_entry, recons = self.dec(dec_carry, feat, reset, **kw)
@@ -172,10 +218,13 @@ class Agent(embodied.jax.Agent):
           **grad_entry,
           'valid': jnp.zeros(reset.shape, bool),
       })))
+    if self.posterior_rng_keys:
+      out[_POSTERIOR_KEY] = posterior_keys
     return carry, act, out
 
   def train(self, carry, data):
     cache_enabled = self.config.gradient_cache.enabled
+    posterior_keys = _replay_posterior_keys(data, self.posterior_rng_keys)
     if cache_enabled:
       nested = elements.tree.nestdict(data)
       future = {
@@ -199,10 +248,16 @@ class Agent(embodied.jax.Agent):
       dyn_carry = carry[1]
       state_taps = jax.tree.map(
           lambda x: jnp.zeros((B, T, *x.shape[1:]), f32), dyn_carry)
-      metrics, (carry, entries, outs, mets), input_grads = self.opt(
-          self.loss, carry, obs, prevact, state_taps, future,
-          training=True, has_aux=True, input_grad_argnums=(3,),
-          separate_input_loss=True)
+      if self.posterior_rng_keys:
+        metrics, (carry, entries, outs, mets), input_grads = self.opt(
+            self.loss, carry, obs, prevact, state_taps, future,
+            posterior_keys, training=True, has_aux=True,
+            input_grad_argnums=(3,), separate_input_loss=True)
+      else:
+        metrics, (carry, entries, outs, mets), input_grads = self.opt(
+            self.loss, carry, obs, prevact, state_taps, future,
+            training=True, has_aux=True, input_grad_argnums=(3,),
+            separate_input_loss=True)
       (incoming_adjoint,) = input_grads
     else:
       metrics, (carry, entries, outs, mets) = self.opt(
@@ -266,7 +321,7 @@ class Agent(embodied.jax.Agent):
 
   def loss(
       self, carry, obs, prevact, state_taps=None, future_adjoint=None,
-      training=False):
+      posterior_keys=None, training=False):
     enc_carry, dyn_carry, dec_carry = carry
     reset = obs['is_first']
     B, T = reset.shape
@@ -276,8 +331,13 @@ class Agent(embodied.jax.Agent):
     # World model
     enc_carry, enc_entries, tokens = self.enc(
         enc_carry, obs, reset, training)
-    dyn_carry, dyn_entries, los, repfeat, mets = self.dyn.loss(
-        dyn_carry, tokens, prevact, reset, training, state_taps)
+    if posterior_keys is None:
+      dyn_carry, dyn_entries, los, repfeat, mets = self.dyn.loss(
+          dyn_carry, tokens, prevact, reset, training, state_taps)
+    else:
+      dyn_carry, dyn_entries, los, repfeat, mets = self.dyn.loss(
+          dyn_carry, tokens, prevact, reset, training, state_taps,
+          posterior_keys=posterior_keys)
     losses.update(los)
     metrics.update(mets)
     dec_carry, dec_entries, recons = self.dec(
@@ -395,6 +455,7 @@ class Agent(embodied.jax.Agent):
     if not self.config.report:
       return carry, {}
 
+    posterior_keys = _replay_posterior_keys(data, self.posterior_rng_keys)
     carry, obs, prevact, _ = self._apply_replay_context(carry, data)
     (enc_carry, dyn_carry, dec_carry) = carry
     B, T = obs['is_first'].shape
@@ -402,16 +463,26 @@ class Agent(embodied.jax.Agent):
     metrics = {}
 
     # Train metrics
-    _, (new_carry, entries, outs, mets) = self.loss(
-        carry, obs, prevact, training=False)
+    if self.posterior_rng_keys:
+      _, (new_carry, entries, outs, mets) = self.loss(
+          carry, obs, prevact, posterior_keys=posterior_keys, training=False)
+    else:
+      _, (new_carry, entries, outs, mets) = self.loss(
+          carry, obs, prevact, training=False)
     mets.update(mets)
 
     # Grad norms
     if self.config.report_gradnorms:
       for key in self.scales:
         try:
-          lossfn = lambda data, carry: self.loss(
-              carry, obs, prevact, training=False)[1][2]['losses'][key].mean()
+          if self.posterior_rng_keys:
+            lossfn = lambda data, carry: self.loss(
+                carry, obs, prevact, posterior_keys=posterior_keys,
+                training=False)[1][2]['losses'][key].mean()
+          else:
+            lossfn = lambda data, carry: self.loss(
+                carry, obs, prevact,
+                training=False)[1][2]['losses'][key].mean()
           grad = nj.grad(lossfn, self.modules)(data, carry)[-1]
           metrics[f'gradnorm/{key}'] = optax.global_norm(grad)
         except KeyError:
@@ -422,9 +493,15 @@ class Agent(embodied.jax.Agent):
     secondhalf = lambda xs: jax.tree.map(lambda x: x[:RB, T // 2:], xs)
     dyn_carry = jax.tree.map(lambda x: x[:RB], dyn_carry)
     dec_carry = jax.tree.map(lambda x: x[:RB], dec_carry)
-    dyn_carry, _, obsfeat = self.dyn.observe(
-        dyn_carry, firsthalf(outs['tokens']), firsthalf(prevact),
-        firsthalf(obs['is_first']), training=False)
+    if self.posterior_rng_keys:
+      dyn_carry, _, obsfeat = self.dyn.observe(
+          dyn_carry, firsthalf(outs['tokens']), firsthalf(prevact),
+          firsthalf(obs['is_first']), training=False,
+          posterior_keys=firsthalf(posterior_keys))
+    else:
+      dyn_carry, _, obsfeat = self.dyn.observe(
+          dyn_carry, firsthalf(outs['tokens']), firsthalf(prevact),
+          firsthalf(obs['is_first']), training=False)
     _, imgfeat, _ = self.dyn.imagine(
         dyn_carry, secondhalf(prevact), length=T - T // 2, training=False)
     dec_carry, _, obsrecons = self.dec(

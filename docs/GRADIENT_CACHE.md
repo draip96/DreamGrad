@@ -72,6 +72,22 @@ taps are inserted before the existing reset mask. Thus a true episode reset has
 zero derivative with respect to the preceding state. Future adjoints are also
 masked to zero when the sampled final row is terminal.
 
+## Stochastic replay-row identity
+
+An overlapping learner window can reconstruct the same physical posterior row
+more than once. Independent categorical draws at that row do not, in general,
+produce the full-BPTT straight-through estimator: the hard stochastic outcome
+also changes the later deterministic state. DreamGrad therefore contains a
+named `gradient_cache.posterior_rng_keys` mode that stores one immutable
+`uint32[2]` sampling key per physical replay row and reuses it with the current
+posterior logits whenever that row is reconstructed. The key fixes stochastic
+path identity without freezing logits, states, parameters, or gradients.
+
+This mode is default-off while the matched acquisition and full-BPTT controls
+are evaluated. Enabling it requires saved gradients, `replay_context=1`, and a
+fresh replay containing the key field. It is not a freshness policy: keys have
+no age or version and are never rewritten by learner cache updates.
+
 ## Freshness policy
 
 There is deliberately no freshness policy. A learner pass writes states from

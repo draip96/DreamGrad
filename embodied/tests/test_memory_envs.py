@@ -87,6 +87,7 @@ def test_memory_profiles_resolve_to_upstream_size12m(profile):
   assert config.run.train_ratio == 1024
   assert config.agent.opt.lr == 4e-5
   assert config.agent.gradient_cache.enabled is True
+  assert config.agent.gradient_cache.posterior_rng_keys is False
   if profile == 'bsuite':
     assert config.env.bsuite.memory_length == 11
     assert config.run.steps == 130_000

@@ -60,32 +60,52 @@ class RSSM(nj.Module):
 
   def observe(
       self, carry, tokens, action, reset, training, single=False,
-      state_taps=None):
+      state_taps=None, posterior_keys=None):
     carry, tokens, action = nn.cast((carry, tokens, action))
+    if posterior_keys is not None:
+      assert posterior_keys.shape == (*reset.shape, 2), (
+          posterior_keys.shape, reset.shape)
+      assert posterior_keys.dtype == jnp.uint32, posterior_keys.dtype
     if single:
       if state_taps is not None:
         state_taps = nn.cast(state_taps)
       carry, (entry, feat) = self._observe(
-          carry, tokens, action, reset, training, state_taps)
+          carry, tokens, action, reset, training, state_taps, posterior_keys)
       return carry, entry, feat
     else:
       unroll = jax.tree.leaves(tokens)[0].shape[1] if self.unroll else 1
-      if state_taps is None:
+      if state_taps is None and posterior_keys is None:
         carry, (entries, feat) = nj.scan(
             lambda carry, inputs: self._observe(
                 carry, *inputs, training),
             carry, (tokens, action, reset), unroll=unroll, axis=1)
-      else:
+      elif state_taps is None:
+        carry, (entries, feat) = nj.scan(
+            lambda carry, inputs: self._observe(
+                carry, inputs[0], inputs[1], inputs[2], training,
+                posterior_key=inputs[3]),
+            carry, (tokens, action, reset, posterior_keys),
+            unroll=unroll, axis=1)
+      elif posterior_keys is None:
         state_taps = nn.cast(state_taps)
         carry, (entries, feat) = nj.scan(
             lambda carry, inputs: self._observe(
                 carry, inputs[0], inputs[1], inputs[2], training, inputs[3]),
             carry, (tokens, action, reset, state_taps),
             unroll=unroll, axis=1)
+      else:
+        state_taps = nn.cast(state_taps)
+        carry, (entries, feat) = nj.scan(
+            lambda carry, inputs: self._observe(
+                carry, inputs[0], inputs[1], inputs[2], training,
+                inputs[3], inputs[4]),
+            carry, (tokens, action, reset, state_taps, posterior_keys),
+            unroll=unroll, axis=1)
       return carry, entries, feat
 
   def _observe(
-      self, carry, tokens, action, reset, training, state_tap=None):
+      self, carry, tokens, action, reset, training, state_tap=None,
+      posterior_key=None):
     deter, stoch, action = nn.mask(
         ((carry['deter'] + state_tap['deter']) if state_tap is not None
          else carry['deter'],
@@ -101,7 +121,16 @@ class RSSM(nj.Module):
       x = self.sub(f'obs{i}', nn.Linear, self.hidden, **self.kw)(x)
       x = nn.act(self.act)(self.sub(f'obs{i}norm', nn.Norm, self.norm)(x))
     logit = self._logit('obslogit', x)
-    stoch = nn.cast(self._dist(logit).sample(seed=nj.seed()))
+    if posterior_key is None:
+      stoch = nn.cast(self._dist(logit).sample(seed=nj.seed()))
+    else:
+      assert posterior_key.shape == (logit.shape[0], 2), (
+          posterior_key.shape, logit.shape)
+      assert posterior_key.dtype == jnp.uint32, posterior_key.dtype
+      stoch = jax.vmap(
+          lambda row_logit, row_key: self._dist(row_logit).sample(
+              seed=row_key))(logit, posterior_key)
+      stoch = nn.cast(stoch)
     carry = dict(deter=deter, stoch=stoch)
     feat = dict(deter=deter, stoch=stoch, logit=logit)
     entry = dict(deter=deter, stoch=stoch)
@@ -134,10 +163,13 @@ class RSSM(nj.Module):
       # return carry, entries, feat, action
       return carry, feat, action
 
-  def loss(self, carry, tokens, acts, reset, training, state_taps=None):
+  def loss(
+      self, carry, tokens, acts, reset, training, state_taps=None,
+      posterior_keys=None):
     metrics = {}
     carry, entries, feat = self.observe(
-        carry, tokens, acts, reset, training, state_taps=state_taps)
+        carry, tokens, acts, reset, training, state_taps=state_taps,
+        posterior_keys=posterior_keys)
     prior = self._prior(feat['deter'])
     post = feat['logit']
     dyn = self._dist(sg(post)).kl(self._dist(prior))

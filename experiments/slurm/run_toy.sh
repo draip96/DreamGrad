@@ -20,26 +20,26 @@ MODEL_AUX_ENABLED=${MODEL_AUX_ENABLED:-true}
 SAVE_EVERY=${SAVE_EVERY:-900}
 BATCH_LENGTH=${BATCH_LENGTH:-64}
 REPLAY_CONTEXT=${REPLAY_CONTEXT:-1}
+POSTERIOR_RNG_KEYS=${POSTERIOR_RNG_KEYS:-false}
 
 ROOT=/project/6101829/draip/DreamGrad
 PYTHON=${ROOT}/.venv/bin/python
 RUNROOT=${DREAMGRAD_RUNROOT:-${ROOT}/runs}
-ARM=cache-${CACHE_ENABLED}
-LOGDIR=${RUNROOT}/toy/distance-${DISTANCE}/seed-${SEED}/${ARM}
 cd "${ROOT}"
 
 if test -n "$(git status --porcelain --untracked-files=all)"; then
   echo 'Refusing scientific run from a dirty worktree.' >&2
   exit 2
 fi
-if test -e "${LOGDIR}"; then
-  echo "Refusing to reuse existing logdir: ${LOGDIR}" >&2
-  exit 2
-fi
 case "${CACHE_ENABLED}" in
   true) CACHE_FLAG=True ;;
   false) CACHE_FLAG=False ;;
   *) echo 'CACHE_ENABLED must be true or false.' >&2; exit 2 ;;
+esac
+case "${POSTERIOR_RNG_KEYS}" in
+  true) POSTERIOR_RNG_KEYS_FLAG=True ;;
+  false) POSTERIOR_RNG_KEYS_FLAG=False ;;
+  *) echo 'POSTERIOR_RNG_KEYS must be true or false.' >&2; exit 2 ;;
 esac
 case "${SEED}" in
   ''|*[!0-9]*) echo 'SEED must be a nonnegative integer.' >&2; exit 2 ;;
@@ -86,8 +86,22 @@ if test "${CACHE_ENABLED}" = true && test "${REPLAY_CONTEXT}" -ne 1; then
   echo 'CACHE_ENABLED=true requires REPLAY_CONTEXT=1.' >&2
   exit 2
 fi
+if test "${POSTERIOR_RNG_KEYS}" = true && test "${CACHE_ENABLED}" != true; then
+  echo 'POSTERIOR_RNG_KEYS=true requires CACHE_ENABLED=true.' >&2
+  exit 2
+fi
 if test $((STEPS % (DISTANCE + 2))) -ne 0 || test $((STEPS % 10)) -ne 0; then
   echo 'STEPS must end on both an episode boundary and driver block.' >&2
+  exit 2
+fi
+
+ARM=cache-${CACHE_ENABLED}
+if test "${POSTERIOR_RNG_KEYS}" = true; then
+  ARM=${ARM}-posterior-keys
+fi
+LOGDIR=${RUNROOT}/toy/distance-${DISTANCE}/seed-${SEED}/${ARM}
+if test -e "${LOGDIR}"; then
+  echo "Refusing to reuse existing logdir: ${LOGDIR}" >&2
   exit 2
 fi
 
@@ -110,6 +124,7 @@ git status --porcelain --untracked-files=all > \
 "${PYTHON}" -m pip freeze > "${LOGDIR}/provenance/pip-freeze.txt"
 sha256sum \
   dreamerv3/agent.py \
+  dreamerv3/configs.yaml \
   dreamerv3/rssm.py \
   embodied/jax/opt.py \
   embodied/core/replay.py \
@@ -131,6 +146,7 @@ sha256sum \
   printf 'SAVE_EVERY=%s\n' "${SAVE_EVERY}"
   printf 'BATCH_LENGTH=%s\n' "${BATCH_LENGTH}"
   printf 'REPLAY_CONTEXT=%s\n' "${REPLAY_CONTEXT}"
+  printf 'POSTERIOR_RNG_KEYS=%s\n' "${POSTERIOR_RNG_KEYS}"
   printf 'PYTHONHASHSEED=0\n'
 } > "${LOGDIR}/provenance/environment.txt"
 
@@ -142,6 +158,7 @@ CMD=("${PYTHON}" dreamerv3/main.py \
   --agent.dyn.rssm.free_nats "${RSSM_FREE_NATS}" \
   --agent.repval_grad "${REPVAL_GRAD_FLAG}" \
   --agent.gradient_cache.enabled "${CACHE_FLAG}" \
+  --agent.gradient_cache.posterior_rng_keys "${POSTERIOR_RNG_KEYS_FLAG}" \
   --batch_length "${BATCH_LENGTH}" \
   --replay_context "${REPLAY_CONTEXT}" \
   --run.steps "${STEPS}" \
