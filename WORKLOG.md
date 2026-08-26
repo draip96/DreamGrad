@@ -803,3 +803,19 @@ small deterministic correctness checks.
   larger distance-257 budget. Every localization run starts from random
   initialization with the same task throughout; none supplies a checkpoint or
   curriculum to a later run.
+
+### 2026-08-26 15:57 UTC - fresh distance-65 localization started
+
+- H100 request `5034451` remained pending for resources while an existing job
+  array recycled the next available GPU. Cancelled it before allocation after
+  `Elapsed=00:00:00`; it created no run directory or result.
+- Submitted the identical configuration as L40S job `5034470`, which started
+  immediately on node `kn104` from clean revision
+  `8ebf1317565482ce0f63c1a8f0c3c30defa26c6b`. Provenance confirms an empty Git
+  status, seed 9407, literal distance 65, cache enabled, `repval_grad=False`,
+  native model auxiliaries, free nats 1.0, `SAVE_EVERY=0`, and an empty
+  checkpoint source.
+- Its exact 201,000-row budget is 3,000 episodes of 67 rows. This fresh task
+  crosses one 64-step learner boundary and is solely a localization test; it
+  neither consumes the failed distance-257 checkpoint nor supplies a
+  checkpoint to a later run.
