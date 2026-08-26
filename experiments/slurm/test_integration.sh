@@ -13,8 +13,23 @@ set -euo pipefail
 ROOT=/project/6101829/draip/DreamGrad
 PYTHON=${ROOT}/.venv/bin/python
 RUN=${ROOT}/experiments/test_runs/integration-${SLURM_JOB_ID}
+: "${EXPECTED_REVISION:?Submit with the exact EXPECTED_REVISION.}"
 mkdir -p "${RUN}/provenance"
 cd "${ROOT}"
+
+ACTUAL_REVISION=$(git rev-parse HEAD)
+printf '%s\n' "${ACTUAL_REVISION}" > \
+  "${RUN}/provenance/git-revision.txt"
+if test "${ACTUAL_REVISION}" != "${EXPECTED_REVISION}"; then
+  echo "Revision drift: expected ${EXPECTED_REVISION}, got ${ACTUAL_REVISION}." >&2
+  exit 2
+fi
+git status --porcelain --untracked-files=all > \
+  "${RUN}/provenance/git-status.txt"
+if test -s "${RUN}/provenance/git-status.txt"; then
+  echo 'Refusing authoritative integration from a dirty worktree.' >&2
+  exit 2
+fi
 
 module load cuda/12.6
 module load cudnn/9.5.1.17
@@ -27,8 +42,6 @@ export PYTHONNOUSERSITE=1
 
 module -t list > "${RUN}/provenance/modules.txt" 2>&1 || true
 nvidia-smi -q > "${RUN}/provenance/nvidia-smi.txt"
-git status --porcelain --untracked-files=all > \
-  "${RUN}/provenance/git-status.txt"
 git diff --binary HEAD -- > "${RUN}/provenance/working-tree.patch"
 sha256sum \
   dreamerv3/agent.py \

@@ -1192,6 +1192,12 @@ small deterministic correctness checks.
   pair remains the only pair used by the no-extra-config-difference assertion.
   The updated checker also revalidated both saved artifacts from integration
   job `5020183` and their matched-config comparison.
+- Committed and pushed the default-off implementation, documentation, launch
+  isolation, and 55-test manifest as
+  `8bbc0435e7e999e9bb346fd990f27fcc86887fb5`. Before resubmitting CUDA gates,
+  added a required `EXPECTED_REVISION` launch guard plus clean-tree rejection
+  to both core and end-to-end integration scripts. Each gate now fails before
+  loading CUDA or executing tests if a dependency-held checkout drifts.
 
 ### 2026-08-26 17:44 UTC - live localization snapshot after integration
 

@@ -13,8 +13,21 @@ set -euo pipefail
 ROOT=/project/6101829/draip/DreamGrad
 PYTHON=${ROOT}/.venv/bin/python
 RUN=${ROOT}/experiments/test_runs/${SLURM_JOB_ID}
+: "${EXPECTED_REVISION:?Submit with the exact EXPECTED_REVISION.}"
 mkdir -p "${RUN}"
 cd "${ROOT}"
+
+ACTUAL_REVISION=$(git rev-parse HEAD)
+printf '%s\n' "${ACTUAL_REVISION}" > "${RUN}/git-revision.txt"
+if test "${ACTUAL_REVISION}" != "${EXPECTED_REVISION}"; then
+  echo "Revision drift: expected ${EXPECTED_REVISION}, got ${ACTUAL_REVISION}." >&2
+  exit 2
+fi
+git status --porcelain --untracked-files=all > "${RUN}/git-status.txt"
+if test -s "${RUN}/git-status.txt"; then
+  echo 'Refusing authoritative tests from a dirty worktree.' >&2
+  exit 2
+fi
 
 module load cuda/12.6
 module load cudnn/9.5.1.17
@@ -22,7 +35,6 @@ export LD_LIBRARY_PATH="${CUDNN_HOME}/lib:${CUDA_HOME}/lib:${EBROOTNCCL}/lib:${L
 export XLA_FLAGS="--xla_gpu_cuda_data_dir=${CUDA_HOME} ${XLA_FLAGS:-}"
 module -t list > "${RUN}/modules.txt" 2>&1 || true
 nvidia-smi -q > "${RUN}/nvidia-smi.txt"
-git status --porcelain --untracked-files=all > "${RUN}/git-status.txt"
 git diff --binary HEAD -- > "${RUN}/working-tree.patch"
 sha256sum \
   dreamerv3/agent.py \
