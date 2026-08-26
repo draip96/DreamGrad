@@ -951,3 +951,6 @@ small deterministic correctness checks.
   The next/final authoritative CUDA run will therefore contain 40 tests. This
   does not invalidate the 38-test pass, but it prevents that pass from being
   presented as the eventual final manifest.
+- Queued 40-test CUDA job `5035220` with `afterany:5035096`, still excluding
+  `kn161`, so it will run as soon as the read-only audit releases the second
+  GPU regardless of the audit's scientific outcome.
