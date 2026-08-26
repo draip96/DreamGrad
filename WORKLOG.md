@@ -1117,3 +1117,19 @@ small deterministic correctness checks.
   `5035858`, excluding `kn161` and gated `afterany:5034470`, so it can use the
   first GPU released by the distance-65 run without displacing either active
   localization arm.
+
+### 2026-08-26 17:25 UTC - matched 1,000-episode boundary snapshot
+
+- Fresh distance 63 reached 1,010 episodes with cumulative accuracy 0.510,
+  last-200 accuracy 0.490, and last-100 accuracy 0.450. Terminal reward-sign
+  accuracy remained 0.506 with MAE 1.000 and imagination advantage magnitude
+  0.00294. It therefore did not reproduce distance 8's abrupt acquisition by
+  episode 885, but its formal 3,000-episode gate remains in progress.
+- At the same wall-clock snapshot, fresh distance 65 had reached 1,978 episodes
+  with cumulative accuracy 0.496, last-500 accuracy 0.502, last-200 accuracy
+  0.480, and last-100 accuracy 0.550. This is likewise an interim chance-level
+  trajectory rather than a formal failed gate.
+- Because both arms still run, no full-BPTT control or posterior-key ablation
+  has been launched or enabled. The categorical oracle establishes a possible
+  estimator mismatch; it does not override the cheaper acquisition controls or
+  prove that mismatch causes these online trajectories.
