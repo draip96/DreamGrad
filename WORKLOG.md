@@ -995,3 +995,18 @@ small deterministic correctness checks.
   258-transition reverse-sweep oracle. Source revision for the queued job was
   `b834432c7cd127ad60e88c417ec1faa4cd344591`; the later worklog-only queue
   record does not change tested code.
+
+### 2026-08-26 16:40 UTC - first-boundary matched control prepared
+
+- The live fresh distance-65 cache-on run reached 972 episodes without the
+  abrupt acquisition seen in the matched distance-8 run: cumulative accuracy
+  was 0.504, last-200 accuracy 0.520, and last-100 accuracy 0.480. This is an
+  interim localization observation, not its predeclared 3,000-episode gate.
+- Prepared the nearest shorter matched control at literal distance 63. Its
+  65-row episodes and 64 optimized learner rows place the query at the end of
+  the native learner span; distance 65 is the first selected condition beyond
+  that span. The control remains fresh/no-checkpoint/no-curriculum, cache-on,
+  seed 9407, `repval_grad=False`, default world-model losses, uniform replay,
+  and final-only checkpointing. The exact budget is 195,000 rows = 3,000
+  episodes. No optimizer, learning-rate, architecture, loss-scale, replay, or
+  cache setting differs from the distance-65 arm.
