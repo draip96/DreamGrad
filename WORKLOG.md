@@ -931,3 +931,17 @@ small deterministic correctness checks.
   Audit helper tests still pass 5/5, Python compilation and diff checks pass,
   and the corrected runtime will use a new output path rather than overwrite
   the failed attempt.
+
+### 2026-08-26 16:29 UTC - authoritative CUDA suite passed
+
+- Replacement CUDA job `5034894` ran on healthy L40S node `kn046` and passed
+  the complete expanded focused suite: 38/38 in 96.38 seconds. This is the
+  authoritative GPU validation for the iterative 258-transition replay oracle,
+  existing cache objectives/indexing/concurrency, environment geometry,
+  analyzer gates, mixed VJPs, and the new audit helper contracts.
+- Corrected audit job `5035049` was assigned to known-ECC node `kn161` before
+  the exclusion could take effect. Cancelled it after 27 seconds and before
+  model execution; its partial `audit-v2` provenance is retained. Request
+  `5035079` excluding that node remained pending on the short partition and was
+  cancelled at zero runtime. Identical replacement `5035096` is pending on the
+  12-hour L40S partition, still excluding `kn161`, with new `audit-v3` output.
