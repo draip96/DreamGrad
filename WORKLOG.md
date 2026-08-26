@@ -763,3 +763,14 @@ small deterministic correctness checks.
 - The probe created no run directory, checkpoint, replay, metric, or scientific
   result. Authoritative distance-257 evidence continues to come only from
   L40S job `5021202`; no duplicate seed was allowed to begin training.
+
+### 2026-08-26 01:36 UTC - BSuite length 11 gated dependency queued
+
+- Queued L40S job `5024478` for the cheapest requested BSuite check, official
+  memory length 11, with Slurm dependency `afterok:5021202`. It remains pending
+  with reason `Dependency` and cannot execute unless the distance-257 job runs
+  its exact budget, completes its analyzer, and exits successfully.
+- The queued configuration is fresh seed 9407, cache enabled, the frozen common
+  acquisition setting `repval_grad=False`, `SAVE_EVERY=0`, 130,000 physical
+  rows, and no checkpoint source. Lengths 17, 25, 31, and 71 remain unqueued;
+  length 11 must pass before spending on them.
