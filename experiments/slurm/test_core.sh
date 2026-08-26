@@ -36,8 +36,12 @@ sha256sum \
   embodied/jax/opt.py \
   embodied/core/replay.py \
   experiments/analyze_memory.py \
+  experiments/audit_toy_checkpoint.py \
+  experiments/slurm/audit_toy_checkpoint.sh \
   tests/test_analyze_memory.py \
+  tests/test_audit_toy_checkpoint.py \
   tests/test_gradient_cache_oracle.py \
+  tests/test_iterative_gradient_cache.py \
   tests/test_rssm_gradient_cache_oracle.py \
   embodied/tests/test_gradient_cache_replay.py \
   embodied/tests/test_mixed_grad.py \
@@ -51,7 +55,9 @@ export PYTHONNOUSERSITE=1
 
 "${PYTHON}" -m pytest -q \
   tests/test_analyze_memory.py \
+  tests/test_audit_toy_checkpoint.py \
   tests/test_gradient_cache_oracle.py \
+  tests/test_iterative_gradient_cache.py \
   tests/test_rssm_gradient_cache_oracle.py \
   embodied/tests/test_gradient_cache_replay.py \
   embodied/tests/test_mixed_grad.py \

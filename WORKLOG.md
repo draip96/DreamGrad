@@ -824,3 +824,66 @@ small deterministic correctness checks.
   rows, and the identical seed and acquisition profile. It cannot execute if
   distance 65 misses its analyzer gate and it has no checkpoint input, so this
   is an independent two-boundary localization point rather than curriculum.
+
+### 2026-08-26 16:11 UTC - replay-backed 258-transition transport oracle
+
+- An independent source audit found no physical-row or reset off-by-one in the
+  saved-gradient path, but identified an evidence gap: the prior greater-than-
+  256 RSSM oracle supplied exact suffix adjoints from attached BPTT rather than
+  iterating messages through the mutable replay implementation.
+- Extracted the existing cache payload slicing into the pure
+  `_gradient_cache_payloads()` helper without changing its write ranges or
+  ordering. Production still writes leading `G_q0`, trailing `S_qT`, then joint
+  interior `(S, G)` rows so paired occurrences win duplicate IDs.
+- Added a deterministic frozen-parameter oracle using the actual categorical
+  RSSM tap path and actual `Replay.update()` across storage chunks. Five reverse
+  backups over physical windows `q194..q258`, `q130..q194`, `q66..q130`,
+  `q2..q66`, and `q0..q64` recover both leaves of `G_q0` from a terminal-only
+  loss and match attached 258-transition BPTT at relative L2 below `1e-5` and
+  cosine above `0.99999`. The deliberately offset `q2..q66` window makes the
+  last backup consume dense interior message `G_q64`, so this is an iterative
+  replay transport check rather than another fixed-boundary identity.
+- The same test verifies exact state/adjoint physical write ranges, paired
+  interior values, validity bits, and a reset at `q130` that makes `G_q129` and
+  `G_q0` exactly zero. Parameters are never optimized in this correctness test.
+- Local deterministic validation passed: the new test passed 1/1 in 20.80
+  seconds, and the combined gradient-cache/RSSM/optimizer/replay set passed
+  21/21 in 66.56 seconds. Added the oracle to the focused Slurm test manifest;
+  an authoritative GPU rerun remains required before the next release claim.
+
+### 2026-08-26 16:21 UTC - read-only failed-checkpoint functional audit
+
+- Source/artifact comparison showed that the failed distance-257 terminal
+  reward metric is a posterior-state readout, whereas actor training consumes
+  stochastic prior imagination of length 15. Final posterior sign accuracy
+  0.8562 therefore does not prove counterfactual prior reward fidelity or an
+  exploitable policy signal. Relative to the passing distance-8 run, the long
+  run also had about 7.4-times smaller imagination advantage magnitude and
+  roughly 42-times lower absolute normalized-return rate; policy randomness
+  remained 0.640 rather than 0.006. These are diagnostic observations, not a
+  new gate or a cache-causality claim.
+- Added `experiments/audit_toy_checkpoint.py`, a read-only artifact audit that
+  traverses persisted replay through UUID successor links, asserts exact
+  cue/query/reward geometry, and loads only the final agent checkpoint. It
+  never calls `Agent.train()` or `Replay.update()`.
+- The audit reports cached-state and full-current posterior results separately:
+  exact policy probabilities and margins conditional on each hard state,
+  terminal posterior reward accuracy, deterministic MAP next-state rewards,
+  Monte Carlo stochastic-prior counterfactual rewards, terminal probability,
+  action-by-cue coverage, and a fixed SHA256-fold nearest-centroid cue probe.
+  MAP is explicitly not labeled expected reward, the probe is explicitly only
+  linear separability, and historical state reconstruction is declared
+  unavailable because parameter versions and stochastic RNG keys were not
+  stored.
+- Added a guarded Slurm launcher that requires a clean tree, refuses to place
+  output or provenance inside the source artifact, refuses overwrites, records
+  the exact command/modules/GPU/revision, and hashes the audit sources plus the
+  resolved training config and exact agent/step checkpoint inputs.
+- Added five deterministic audit-helper tests and included both new test sets
+  in the focused Slurm manifest. Helper tests passed 5/5. My first local oracle
+  invocation selected CUDA on the login node and failed before the test with a
+  missing-DNN-library backend error; the explicit CPU rerun passed 1/1 in 20.95
+  seconds. The cache/environment-focused local set separately passed 33/33 in
+  67.53 seconds, and the final expanded local manifest passed 38/38 in 66.53
+  seconds. These local checks are non-scientific; the expanded CUDA manifest
+  and the checkpoint audit itself remain to run through Slurm.

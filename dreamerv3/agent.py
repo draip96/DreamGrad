@@ -21,6 +21,30 @@ concat = lambda xs, a: jax.tree.map(lambda *x: jnp.concatenate(x, a), *xs)
 isimage = lambda s: s.dtype == np.uint8 and len(s.shape) == 3
 
 
+def _gradient_cache_payloads(stepid, state_updates, grad_updates):
+  """Align learner states and incoming adjoints with physical replay rows."""
+  state_fields = {k: v for k, v in state_updates.items() if k != 'stepid'}
+  grad_fields = {k: v for k, v in grad_updates.items() if k != 'stepid'}
+  leading_grad = {
+      'stepid': stepid[:, :1],
+      **{k: v[:, :1] for k, v in grad_fields.items()},
+  }
+  trailing_state = {
+      'stepid': stepid[:, -1:],
+      **{k: v[:, -1:] for k, v in state_fields.items()},
+  }
+  payloads = [leading_grad, trailing_state]
+  time = stepid.shape[1] - 1
+  if time > 1:
+    paired = {
+        'stepid': stepid[:, 1:-1],
+        **{k: v[:, :-1] for k, v in state_fields.items()},
+        **{k: v[:, 1:] for k, v in grad_fields.items()},
+    }
+    payloads.append(paired)
+  return tuple(payloads)
+
+
 class Agent(embodied.jax.Agent):
 
   banner = [
@@ -221,25 +245,8 @@ class Agent(embodied.jax.Agent):
       # endpoint writes happen first, then paired rows win any cross-batch
       # duplicate IDs. This preserves relative state/adjoint freshness without
       # versions, ages, filtering, or resampling.
-      state_fields = {k: v for k, v in updates.items() if k != 'stepid'}
-      grad_fields = {k: v for k, v in grad_updates.items() if k != 'stepid'}
-      leading_grad = {
-          'stepid': data['stepid'][:, :1],
-          **{k: v[:, :1] for k, v in grad_fields.items()},
-      }
-      trailing_state = {
-          'stepid': data['stepid'][:, -1:],
-          **{k: v[:, -1:] for k, v in state_fields.items()},
-      }
-      payloads = [leading_grad, trailing_state]
-      if T > 1:
-        paired = {
-            'stepid': data['stepid'][:, 1:-1],
-            **{k: v[:, :-1] for k, v in state_fields.items()},
-            **{k: v[:, 1:] for k, v in grad_fields.items()},
-        }
-        payloads.append(paired)
-      outs['replay'] = tuple(payloads)
+      outs['replay'] = _gradient_cache_payloads(
+          data['stepid'], updates, grad_updates)
       incoming_flat = jnp.concatenate([
           x.reshape((B, -1)) for x in incoming_adjoint.values()], -1)
       future_flat = jnp.concatenate([
