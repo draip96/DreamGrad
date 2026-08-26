@@ -887,3 +887,20 @@ small deterministic correctness checks.
   67.53 seconds, and the final expanded local manifest passed 38/38 in 66.53
   seconds. These local checks are non-scientific; the expanded CUDA manifest
   and the checkpoint audit itself remain to run through Slurm.
+
+### 2026-08-26 16:24 UTC - transport proof and audit dispatched
+
+- Committed and pushed the semantics-preserving payload-helper extraction,
+  iterative replay oracle, read-only checkpoint audit, launch guards, tests,
+  and worklog as `caa598d02dfd779b98da2be7b1c780a5b97c1513`.
+- Launched authoritative expanded CUDA test job `5034819` on L40S node `kn161`
+  from that clean revision. The manifest now contains 38 focused tests,
+  including the actual-Replay 258-transition reverse sweep and five audit
+  helper contracts.
+- Launched read-only distance-257 checkpoint audit job `5034831` on L40S node
+  `kn035`, also from the clean revision. It uses batch size 16, 64 stochastic
+  prior samples per action/state, four fixed-seed full-current posterior
+  reconstructions, and audit seed 0. Its new output target is
+  `runs/audits/distance-257-failed-seed9407/audit.json`, outside the immutable
+  failed-run artifact; exact source and checkpoint hashes are captured beside
+  it. This audit cannot turn the failed learning gate into a pass.
