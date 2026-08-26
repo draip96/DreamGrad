@@ -1063,3 +1063,20 @@ small deterministic correctness checks.
   production/localization commands are therefore unchanged. These knobs are
   solely to make a possible cache-off full-BPTT diagnostic auditable; no such
   experiment has been launched, and the running 63/65 jobs are unaffected.
+- The predeclared distance-65 oracle, if required, will use exactly three named
+  deltas from the live cache arm: `batch_length=133`, `replay_context=0`, and
+  `gradient_cache.enabled=False`. An episode has 67 rows, and 133 = 2*67-1 is
+  the smallest sliding-window length that guarantees at least one complete
+  cue-through-terminal episode for every uniformly sampled start phase. It
+  will retain seed 9407, 201,000 rows/3,000 episodes, batch size 16,
+  `train_ratio=1024`, `repval_grad=False`, free nats 1.0, all native losses,
+  uniform replay, and final-only saving.
+- Keeping `train_ratio=1024` holds optimized replay transitions per environment
+  row fixed. It implies 1024/(16*133) = 64/133 optimizer calls per row rather
+  than one; raising the ratio to preserve optimizer-call count would double
+  sampled-transition compute and is deliberately rejected as an extra
+  override. The 2.08-times activation span is expected, but not guaranteed, to
+  fit an L40S based on the current run's roughly 14% peak memory report.
+- Static `bash -n` validation passes. Clean-tree guard probes also confirmed
+  that a nonnumeric `BATCH_LENGTH` and cache-on `REPLAY_CONTEXT=0` are both
+  rejected with exit status 2 before modules, directories, or training start.
