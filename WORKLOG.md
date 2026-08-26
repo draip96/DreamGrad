@@ -917,3 +917,17 @@ small deterministic correctness checks.
   `5034894` requests the identical clean-tree suite on the 12-hour L40S
   partition with a one-hour limit and still excludes `kn161`; it is pending for
   resources. No source or test configuration changed between attempts.
+
+### 2026-08-26 16:27 UTC - checkpoint audit dtype seam corrected
+
+- Audit job `5034831` loaded and verified the exact final checkpoint, then
+  stopped after 1:49 at its first direct prior call. Persisted replay states are
+  float32, while `RSSM.imagine()` expects the configured BF16 compute dtype;
+  the audit hook bypassed the `RSSM.observe()` entry point that normally casts
+  them. The assertion occurred before an audit JSON was produced. Its source
+  artifact stayed untouched and its failed-attempt provenance is preserved.
+- Added the native `nets.cast()` conversion inside both read-only prior hooks.
+  This changes neither training, replay, cache values, nor model parameters.
+  Audit helper tests still pass 5/5, Python compilation and diff checks pass,
+  and the corrected runtime will use a new output path rather than overwrite
+  the failed attempt.

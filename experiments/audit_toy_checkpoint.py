@@ -491,6 +491,7 @@ class CheckpointRunner:
       }
 
     def prior_sample(state, action):
+      state = nets.cast(state)
       _, (feat, _) = model.dyn.imagine(
           state, {'action': action}, 1, False, single=True)
       output = heads(feat)
@@ -500,6 +501,7 @@ class CheckpointRunner:
       }
 
     def prior_map(state, action):
+      state = nets.cast(state)
       action_embed = nets.DictConcat(model.dyn.act_space, 1)(
           {'action': action})
       deter = model.dyn._core(state['deter'], state['stoch'], action_embed)
