@@ -904,3 +904,16 @@ small deterministic correctness checks.
   `runs/audits/distance-257-failed-seed9407/audit.json`, outside the immutable
   failed-run artifact; exact source and checkpoint hashes are captured beside
   it. This audit cannot turn the failed learning gate into a pass.
+
+### 2026-08-26 16:25 UTC - CUDA test node ECC non-result
+
+- CUDA test job `5034819` failed after 16 seconds on node `kn161` before any
+  GPU computation: JAX reported `CUDA_ERROR_ECC_UNCORRECTABLE` and could not
+  initialize a supported CUDA device. All 11 GPU-touching tests failed at the
+  same backend initialization point while 27 CPU-only tests passed. This is an
+  infrastructure non-result with no implementation interpretation.
+- Submitted replacement `5034878` excluding `kn161`, then cancelled it at zero
+  runtime when the short partition had no immediate resource. Replacement job
+  `5034894` requests the identical clean-tree suite on the 12-hour L40S
+  partition with a one-hour limit and still excludes `kn161`; it is pending for
+  resources. No source or test configuration changed between attempts.
