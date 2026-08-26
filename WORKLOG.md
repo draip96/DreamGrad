@@ -819,3 +819,8 @@ small deterministic correctness checks.
   crosses one 64-step learner boundary and is solely a localization test; it
   neither consumes the failed distance-257 checkpoint nor supplies a
   checkpoint to a later run.
+- Queued L40S job `5034475` for fresh distance 129 with dependency
+  `afterok:5034470`. It requests 393,000 rows, exactly 3,000 episodes of 131
+  rows, and the identical seed and acquisition profile. It cannot execute if
+  distance 65 misses its analyzer gate and it has no checkpoint input, so this
+  is an independent two-boundary localization point rather than curriculum.
