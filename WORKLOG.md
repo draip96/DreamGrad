@@ -1014,3 +1014,38 @@ small deterministic correctness checks.
   the known-ECC node. Its recorded source revision is
   `30218981a7959441f3d734815b35af66d7a7984d` and its recorded launch-time tree
   is clean.
+
+### 2026-08-26 16:47 UTC - online-only cache seam audit
+
+- Two independent read-only source/artifact reviews found no concrete defect
+  in batch scaling, complete RSSM-state handling, delayed-output IDs, reset
+  masks, physical row alignment, multi-payload ordering/atomicity, uniform
+  replay coverage, BF16 representability, or the `repval_grad=False`
+  interaction. The 65-distance snapshot had roughly 16 sampled windows per
+  inserted row, 3.17 million cache-row updates per report interval, finite
+  adjoints, and future use 0.9839 versus eligible nonterminal fraction
+  66/67 = 0.9851. These facts establish availability and plumbing, not useful
+  reward-credit depth.
+- The single material untested assumption is the stochastic/moving-target
+  boundary approximation. An interior cached `(S_q, G_q)` pair comes from one
+  older forward pass, while a preceding sampled window contracts `G_q` with a
+  newly reconstructed endpoint produced by an independent hard categorical
+  posterior draw and newer parameters. The replay-backed 258-transition oracle
+  deliberately freezes parameters, uses FP32, and forces deterministic
+  posterior categories so it does not qualify this online seam. This is a
+  hypothesis and an explicit limitation of the requested no-freshness design,
+  not evidence for versions, rejection, EMA, resampling, or other forbidden
+  freshness machinery.
+- The running distance-63 control is therefore the cheapest decisive
+  falsifier already in flight: if 63 also fails, the 65 trajectory cannot be
+  attributed specifically to a bootstrapped boundary; if 63 passes and 65
+  fails, the first online cached-adjoint boundary becomes localized without
+  yet proving which stochastic/optimization mechanism caused it.
+- Provenance note for dependent distance-129 job `5034475`: if it becomes
+  eligible, it will read the then-current checkout. Relative to distance 65,
+  the current `agent.py` differs only by the semantics-preserving extraction of
+  unchanged payload slices into `_gradient_cache_payloads()`, validated by the
+  40/40 CUDA suite. Retain the job if 65 passes, but report it as the same
+  learner semantics/config under a tested mechanical refactor rather than as a
+  byte-identical source artifact. Any further training-source change before
+  allocation would require cancelling and requeuing it.
