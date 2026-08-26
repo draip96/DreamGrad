@@ -1112,3 +1112,8 @@ small deterministic correctness checks.
   expanded focused manifest then passed 41/41 locally in 111.80 seconds. These
   remain deterministic local correctness checks; the new 41-test manifest has
   not yet passed on CUDA through Slurm.
+- Committed and pushed the oracle and manifest as
+  `b089922f51f3653290c01ee98d20e5d006b382f6`. Queued authoritative L40S job
+  `5035858`, excluding `kn161` and gated `afterany:5034470`, so it can use the
+  first GPU released by the distance-65 run without displacing either active
+  localization arm.
