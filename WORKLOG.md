@@ -753,3 +753,13 @@ small deterministic correctness checks.
   one save line, directly verifying that periodic saving is disabled. Saved
   adjoints were finite and future-message use was 0.9867. Learning metrics at
   only 15 complete episodes remain uninterpretable.
+
+### 2026-08-25 23:20 UTC - zero-runtime H100 scheduling probe
+
+- Submitted job `5022620` as a possible duplicate distance-257 allocation on
+  the H100 partition, but Slurm reported no assigned node and no predicted
+  start while the relevant nodes were reserved or down. Cancelled it after
+  24 seconds pending, before allocation or execution (`Elapsed=00:00:00`).
+- The probe created no run directory, checkpoint, replay, metric, or scientific
+  result. Authoritative distance-257 evidence continues to come only from
+  L40S job `5021202`; no duplicate seed was allowed to begin training.
